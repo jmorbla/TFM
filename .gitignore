@@ -1,0 +1,74 @@
+# ----------------------------
+# 🔹 Entornos virtuales
+# ----------------------------
+venv/
+.env/
+.env.*
+test_env/
+ENV/
+env/
+.venv/
+
+# ----------------------------
+# 🔹 Python
+# ----------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribuciones / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Logs
+*.log
+
+# ----------------------------
+# 🔹 Jupyter / notebooks
+# ----------------------------
+.ipynb_checkpoints/
+
+# ----------------------------
+# 🔹 VSCode
+# ----------------------------
+.vscode/
+
+# ----------------------------
+# 🔹 Sistema operativo
+# ----------------------------
+.DS_Store
+Thumbs.db
+
+# ----------------------------
+# 🔹 Archivos de configuración sensibles
+# ----------------------------
+.env
+*.env
+
+# ----------------------------
+# 🔹 Datos (muy importante para tu TFM)
+# ----------------------------
+data/
+datasets/
+*.csv
+*.parquet
+*.zip
+
+# ----------------------------
+# 🔹 Modelos ML / checkpoints
+# ----------------------------
+models/
+checkpoints/
+*.h5
+*.pt
+*.pth
+*.ckpt
+*.onnx
+
+# ----------------------------
+# 🔹 Otros
+# ----------------------------
+*.tmp
+*.bak
