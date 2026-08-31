@@ -1,0 +1,37 @@
+# ─────────────────────────────────────────────────────────────────────
+# GENERADO AUTOMÁTICAMENTE — Fase 1 (tuning de learning rate)
+# Variante: base  ·  lr0 = 0.001
+# Épocas reducidas a 25: esta fase sirve para ORDENAR learning rates,
+# no para converger. No usar estos YAML para los runs finales.
+# Base: configs/yolo11m.yaml
+# ─────────────────────────────────────────────────────────────────────
+model: yolo11m
+pretrained: true          # start from COCO weights
+weights: yolo11m.pt       # downloaded automatically by ultralytics
+
+training:
+  # Techo, no objetivo: el early stopping decide la época real.
+  # Medido en el run de 50 épocas: mejor mAP en la 48, 95 % del máximo ya en la
+  # 29 y 99 % en la 44 -> estaba en meseta. 80 da margen sin desperdiciar GPU.
+  epochs: 25
+  img_size: 640
+  batch_size: 8
+  optimizer: AdamW
+  lr0: 0.001
+  lrf: 0.01               # final lr = lr0 * lrf
+  momentum: 0.937
+  weight_decay: 0.0005
+  warmup_epochs: 3
+  cos_lr: true
+  amp: true               # automatic mixed precision (RTX 5070)
+  patience: 15            # early stopping — IDÉNTICO en los 5 modelos
+  save_period: 5
+
+augmentation:
+  mosaic: 1.0
+  mixup: 0.1
+  flipud: 0.0
+  fliplr: 0.5
+  hsv_h: 0.015
+  hsv_s: 0.7
+  hsv_v: 0.4

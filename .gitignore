@@ -1,0 +1,23 @@
+# Carpetas de datos BDD100K (no subir al repo)
+bdd100k_dataset/
+bdd100k_images_100k/
+bdd100k_labels/
+bdd100k_labels_yolo/
+data_yolo/
+
+# Curva de aprendizaje: datos y salidas regenerables (~186.000 ficheros).
+# El código del experimento (run_curve.py, eval_curve.py, analisis.ipynb) y sus
+# resultados.json SÍ se versionan.
+experiments/curva_aprendizaje/datasets/
+experiments/curva_aprendizaje/runs/
+
+notebooks/
+docs/
+
+# Artefactos de compilación de Python
+__pycache__/
+*.pyc
+
+# Checkpoints y pesos de modelos (demasiado grandes para git, incluyen ficheros >100MB)
+runs/
+*.pt

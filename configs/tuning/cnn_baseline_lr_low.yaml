@@ -1,0 +1,44 @@
+# ─────────────────────────────────────────────────────────────────────
+# GENERADO AUTOMÁTICAMENTE — Fase 1 (tuning de learning rate)
+# Variante: low  ·  lr = 0.00033
+# Épocas reducidas a 25: esta fase sirve para ORDENAR learning rates,
+# no para converger. No usar estos YAML para los runs finales.
+# Base: configs/cnn_baseline.yaml
+# ─────────────────────────────────────────────────────────────────────
+model: cnn_baseline
+# Lightweight custom CNN: backbone (MobileNetV3-Small) + FPN neck + anchor-free head
+backbone: mobilenet_v3_small
+pretrained_backbone: true
+
+training:
+  # Techo, no objetivo. La convergencia del run anterior (30 épocas) NO sirve de
+  # referencia: los anchors se han rehecho por completo y la supervisión pasó
+  # del 71 % al 99 % de los objetos. Es el modelo más barato (1.6 min/época,
+  # 4 % del presupuesto), así que damos margen amplio.
+  epochs: 25
+  # 640 px en vez de 416: a 416 el objeto mediano de BDD100K mide 16 px y el
+  # 49 % baja de esa cifra. A 640 sube a 25 px y la cobertura de anchors pasa
+  # del 87.5 % al 90.6 %. Además sitúa al modelo entre SSD300 y YOLO/DETR,
+  # rellenando el hueco de resolución de la comparativa.
+  img_size: 640
+  # Reducido de 32 a 8: el nivel P2 cuadruplica los anchors (363 840 a 640 px) y
+  # la torre de 4 convs del head se aplica sobre un mapa de 160x284 en P2.
+  # Medido en la RTX 5070 (8 GB) con la DetectionLoss real:
+  #   batch 16 -> 11.50 GB  DESBORDA a RAM del sistema, 99 min/época
+  #   batch  8 ->  5.85 GB  OK, 5.1 min/época
+  # Es el precio de usar P2 en un detector denso: RetinaNet usa P3-P7 justamente
+  # por esto. Faster R-CNN sí puede permitirse P2 porque su head corre sobre
+  # ~1000 RoIs dispersas, no sobre el mapa de características completo.
+  batch_size: 8
+  optimizer: AdamW
+  lr: 0.00033
+  weight_decay: 0.0001
+  lr_scheduler: cosine
+  amp: true
+
+architecture:
+  fpn_out_channels: 96
+  head_channels: 128
+  # Informativo: el valor efectivo es NUM_ANCHORS en models/cnn_baseline/loss.py
+  # (2 escalas x 3 aspect ratios). Anchors base: 12/24/48 px para stride 8/16/32.
+  num_anchors: 6          # per scale (3 scales from FPN)

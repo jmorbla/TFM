@@ -1,0 +1,29 @@
+# ─────────────────────────────────────────────────────────────────────
+# GENERADO AUTOMÁTICAMENTE — Fase 1 (tuning de learning rate)
+# Variante: high  ·  lr = 0.015
+# Épocas reducidas a 20: esta fase sirve para ORDENAR learning rates,
+# no para converger. No usar estos YAML para los runs finales.
+# Base: configs/faster_rcnn.yaml
+# ─────────────────────────────────────────────────────────────────────
+model: faster_rcnn
+backbone: resnet50_fpn_v2
+pretrained: true          # COCO weights via torchvision
+
+training:
+  # Techo, no objetivo. En el run de 40 épocas la pérdida aún bajaba un 30 % en
+  # el último cuarto: NO había convergido. Es además el 2º modelo más caro
+  # (16.6 min/época), así que 60 es el equilibrio entre convergencia y GPU.
+  epochs: 20
+  img_size: 800           # shorter edge; longer capped at 1333
+  batch_size: 4           # two-stage detector is heavier
+  optimizer: SGD
+  lr: 0.015
+  momentum: 0.9
+  weight_decay: 0.0005
+  lr_scheduler: cosine    # más suave que step; evita caídas bruscas con dataset pequeño
+  amp: true
+
+inference:
+  score_threshold: 0.05
+  nms_threshold: 0.5
+  detections_per_img: 300

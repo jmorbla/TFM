@@ -1,0 +1,37 @@
+# BDD100K dataset configuration
+# Adjust paths to wherever you have the data stored
+
+dataset:
+  name: bdd100k
+  # Root where images live — subfolders train/ val/ test/
+  images_dir: bdd100k_images_100k/100k
+  # Root where YOLO-format labels will be written by prepare_bdd100k.py
+  labels_dir: bdd100k_labels_yolo
+  # Original BDD100K per-image JSON labels — subfolders train/ val/
+  ann_dir: bdd100k_labels/100k
+
+  # Classes (same order as BDD100K detection benchmark)
+  names:
+    0: pedestrian
+    1: rider
+    2: car
+    3: truck
+    4: bus
+    5: train
+    6: motorcycle
+    7: bicycle
+    8: traffic light
+    9: traffic sign
+  nc: 10
+
+  # Subset sampling (set to null to use all available images)
+  subset:
+    train: 8000    # images to sample from training split
+    val: 2000      # images to sample from val split
+    seed: 42
+
+training:
+  img_size: 640
+  batch_size: 16
+  num_workers: 2   # reducido para evitar CLOCK_WATCHDOG_TIMEOUT
+  pin_memory: true
