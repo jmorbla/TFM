@@ -74,10 +74,13 @@ def build_cmd(model: str, size: int) -> list:
     epochs = EPOCHS[model][size]
 
     if model == "yolo11m":
+        # Ruta ABSOLUTA: con una relativa, Ultralytics la resuelve contra su
+        # settings['runs_dir'] y escribe en runs/detect/<lo que le pases>/,
+        # mezclando las salidas del experimento con las del proyecto principal.
         return [sys.executable, "models/yolo11/train.py",
                 "--config", "configs/yolo11m.yaml",
                 "--data", str(DATASETS / f"yolo_{tag(size)}.yaml"),
-                "--runs_dir", str(RUNS / "yolo11m"),
+                "--runs_dir", str((RUNS / "yolo11m").resolve()),
                 "--run_name", name, "--seed", str(SEED)]
 
     # cnn_baseline pasa por train.py, que lee las rutas del YAML del proyecto.

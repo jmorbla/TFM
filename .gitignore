@@ -21,3 +21,10 @@ __pycache__/
 # Checkpoints y pesos de modelos (demasiado grandes para git, incluyen ficheros >100MB)
 runs/
 *.pt
+
+*.pdf
+*.jpg
+*.jpeg
+*.png
+
+figuras_*/**

@@ -25,8 +25,8 @@ from pathlib import Path
 
 VAL_SUBSET = 2000     # idéntico en todos los tamaños
 SEED = 42
-CLASS_NAMES = ["pedestrian", "rider", "car", "truck", "bus", "train",
-               "motorcycle", "bicycle", "traffic light", "traffic sign"]
+CLASS_NAMES = ["person", "rider", "car", "truck", "bus", "train",
+               "motor", "bike", "traffic light", "traffic sign"]
 
 # Todo el experimento vive aquí, aislado del dataset principal del TFM para no
 # mezclar los datos de la comparativa con los de esta prueba puntual.

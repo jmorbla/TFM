@@ -20,11 +20,29 @@ training:
   patience: 15            # early stopping — IDÉNTICO en los 5 modelos
   save_period: 5
 
+# ── Augmentación ─────────────────────────────────────────────────────────────
+# TODOS los parámetros van explícitos, incluidos los que Ultralytics aplicaría
+# igualmente por defecto. Sin esto el YAML miente por omisión: `translate=0.1`,
+# `scale=0.5`, `hsv_*` y `erasing=0.4` se aplican aunque no aparezcan escritos,
+# y la memoria no podría declarar qué recibió realmente el modelo.
+# Contraste: los otros 4 modelos solo reciben RandomHorizontalFlip(0.5)
+# (data/transforms.py::build_transforms), sin ninguna otra augmentación.
+# VARIANTE A — augmentación completa de Ultralytics (YOLO "tal como se usa").
+# Es el sistema que compite en la práctica. Su ventaja sobre el resto mezcla
+# arquitectura y pipeline de datos: por eso existe la variante B.
 augmentation:
-  mosaic: 1.0
-  mixup: 0.1
-  flipud: 0.0
-  fliplr: 0.5
+  mosaic: 1.0        # pega 4 imágenes en una: +diversidad y objetos a ~1/2 escala
+  mixup: 0.1         # promedia 2 imágenes, une sus cajas (regularizador)
   hsv_h: 0.015
   hsv_s: 0.7
   hsv_v: 0.4
+  translate: 0.1
+  scale: 0.5
+  fliplr: 0.5
+  flipud: 0.0
+  degrees: 0.0
+  shear: 0.0
+  perspective: 0.0
+  copy_paste: 0.0
+  cutmix: 0.0
+  erasing: 0.0       # se desactiva: es de clasificación y enturbia la ablación

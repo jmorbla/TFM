@@ -1,0 +1,54 @@
+model: yolo11m
+pretrained: true          # start from COCO weights
+weights: yolo11m.pt       # downloaded automatically by ultralytics
+
+training:
+  # Techo, no objetivo: el early stopping decide la época real.
+  # Medido en el run de 50 épocas: mejor mAP en la 48, 95 % del máximo ya en la
+  # 29 y 99 % en la 44 -> estaba en meseta. 80 da margen sin desperdiciar GPU.
+  epochs: 80
+  img_size: 640
+  batch_size: 8
+  optimizer: AdamW
+  lr0: 0.001
+  lrf: 0.01               # final lr = lr0 * lrf
+  momentum: 0.937
+  weight_decay: 0.0005
+  warmup_epochs: 3
+  cos_lr: true
+  amp: true               # automatic mixed precision (RTX 5070)
+  patience: 15            # early stopping — IDÉNTICO en los 5 modelos
+  save_period: 5
+
+# ── Augmentación ─────────────────────────────────────────────────────────────
+# TODOS los parámetros van explícitos, incluidos los que Ultralytics aplicaría
+# igualmente por defecto. Sin esto el YAML miente por omisión: `translate=0.1`,
+# `scale=0.5`, `hsv_*` y `erasing=0.4` se aplican aunque no aparezcan escritos,
+# y la memoria no podría declarar qué recibió realmente el modelo.
+# Contraste: los otros 4 modelos solo reciben RandomHorizontalFlip(0.5)
+# (data/transforms.py::build_transforms), sin ninguna otra augmentación.
+# VARIANTE B — control de la ablación de augmentación.
+# Deja EXACTAMENTE la misma augmentación que reciben los otros 4 modelos:
+# volteo horizontal con p=0.5 y nada más. No basta con poner mosaic=0 y
+# mixup=0, porque translate, scale, hsv_* y erasing seguirían activos por
+# defecto y YOLO mantendría una ventaja que ningún otro modelo tiene.
+#
+# La diferencia A - B es la contribución de la augmentación de Ultralytics.
+# Lo que quede del margen de YOLO sobre el resto en la variante B es
+# atribuible a la arquitectura y al preentrenamiento, no al pipeline de datos.
+augmentation:
+  mosaic: 0.0
+  mixup: 0.0
+  hsv_h: 0.0
+  hsv_s: 0.0
+  hsv_v: 0.0
+  translate: 0.0
+  scale: 0.0
+  fliplr: 0.5        # unico superviviente: iguala a build_transforms(train=True)
+  flipud: 0.0
+  degrees: 0.0
+  shear: 0.0
+  perspective: 0.0
+  copy_paste: 0.0
+  cutmix: 0.0
+  erasing: 0.0

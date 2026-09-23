@@ -35,6 +35,7 @@ inferencia imagen a imagen. Pasar --batch_size N mide throughput de batch.
 
 import argparse
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -50,9 +51,23 @@ from data.dataset import BDD100KDetection, BDD100KSequence
 from data.transforms import build_transforms
 
 # ── Constantes ────────────────────────────────────────────────────────────────
+
+# ── Consola: forzar UTF-8 ────────────────────────────────────────────────────
+# Este script imprime caracteres de caja y flechas. Cuando lo lanza una persona
+# desde una terminal moderna funciona, pero cuando lo lanza otro script por
+# subprocess la salida es una tubería y Python cae al encoding del sistema
+# (cp1252 en Windows), que no los admite: UnicodeEncodeError DESPUES de haber
+# hecho todo el trabajo. Se fuerza UTF-8 y, si el terminal no lo admite, se
+# degrada a reemplazar el carácter en vez de abortar.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 CLASS_NAMES = [
-    "pedestrian", "rider", "car", "truck", "bus",
-    "train", "motorcycle", "bicycle", "traffic light", "traffic sign",
+    "person", "rider", "car", "truck", "bus",
+    "train", "motor", "bike", "traffic light", "traffic sign",
 ]
 
 # ── Sobre el desbalanceo de clases ───────────────────────────────────────────
@@ -193,6 +208,12 @@ class DetectionEvaluator:
         self.metric = MeanAveragePrecision(
             class_metrics=True, iou_type="bbox",
             max_detection_thresholds=MAX_DET_THRESHOLDS,
+            # extended_summary expone los arrays crudos precision/recall/classes
+            # que pycocotools calcula internamente para llegar al mAP agregado.
+            # No cambia ninguna cifra ya existente (map, map_50, map_per_class...,
+            # verificado): solo añade lo necesario para el AP por umbral de IoU
+            # y la curva PR completa por clase (ver _extended()).
+            extended_summary=True,
         )
         self._conf, self._tp, self._cls = [], [], []
         self._gt_per_class = np.zeros(nc, dtype=np.int64)
@@ -251,6 +272,7 @@ class DetectionEvaluator:
                     class_ap[int(c)] = per_class[j].item()
 
         p, r, f1, conf = self._pr_at_max_f1()
+        ap_por_iou, pr_curve = self._extended(res)
 
         return {
             "map50":      res["map_50"].item(),
@@ -264,7 +286,54 @@ class DetectionEvaluator:
             # al AP para que se vea de un vistazo qué cifras son fiables y
             # cuáles descansan en un puñado de objetos.
             "gt_per_class": {int(i): int(n) for i, n in enumerate(self._gt_per_class)},
+            # AP por umbral de IoU (media sobre clases con GT) y curva PR
+            # completa por clase a IoU=0.5 -- ver _extended().
+            "ap_por_iou": ap_por_iou,
+            "iou_thresholds": [round(float(t), 3) for t in self.metric.iou_thresholds],
+            "pr_curve": pr_curve,
         }
+
+    def _extended(self, res) -> tuple:
+        """AP por umbral de IoU y curva PR completa por clase, a partir de
+        extended_summary=True (arrays crudos de pycocotools).
+
+        `res["precision"]` tiene forma (T, R, K, A, M): T=10 umbrales de IoU
+        (0.50:0.05:0.95), R=101 puntos de recall (rejilla estándar COCO
+        0..1), K=clases vistas, A=4 rangos de área (se usa 0="all"),
+        M=3 topes de detecciones por imagen (se usa el último = 100, igual
+        que en el resto del protocolo). -1 marca "clase sin GT en esa celda"
+        (convención COCO) y se enmascara antes de promediar -- promediar el
+        -1 tal cual, como con el centinela de evaluate.py, destrozaría la
+        media.
+
+        La curva PR usa el mismo IoU=0.5 que ya reporta `map50`, pero NO es
+        la misma curva que `_pr_at_max_f1()`: esta es el cálculo estándar de
+        pycocotools (interpolación a 101 puntos de recall fijos); la de
+        `_pr_at_max_f1` es una réplica del criterio de Ultralytics para el
+        punto de máximo F1. Coexisten con propósitos distintos.
+        """
+        prec = res.get("precision")
+        classes = res.get("classes")
+        if prec is None or classes is None:
+            return None, None
+        prec = prec.numpy()
+
+        ap_por_iou = []
+        for t in range(prec.shape[0]):
+            col_aps = []
+            for k in range(prec.shape[2]):
+                col = prec[t, :, k, 0, -1]
+                valid = col[col > -1]
+                if len(valid):
+                    col_aps.append(float(valid.mean()))
+            ap_por_iou.append(float(np.mean(col_aps)) if col_aps else None)
+
+        pr_curve = {}
+        for k, cls_label in enumerate(classes.tolist()):
+            col = prec[0, :, k, 0, -1]
+            pr_curve[int(cls_label)] = [None if v <= -1 else round(float(v), 4) for v in col]
+
+        return ap_por_iou, pr_curve
 
     def _pr_at_max_f1(self) -> tuple:
         """Curvas P-R por clase interpoladas sobre una rejilla de confianza.
@@ -649,6 +718,75 @@ def evaluate_yolo(weights: str, images_dir: str, labels_dir: str,
     return out
 
 
+
+# ── Complejidad del modelo: GFLOPs, parámetros y resolución real ─────────────
+# El FPS por sí solo NO separa arquitectura de ingeniería. YOLO viene de
+# Ultralytics (convoluciones fusionadas, NMS optimizado), Faster R-CNN y SSD de
+# las implementaciones de referencia de torchvision, y DETR de HuggingFace: la
+# calidad de implementación entra en el cronómetro. Y cada modelo corre a su
+# resolución nativa, con ~11x de diferencia en píxeles entre SSD300 (300x300) y
+# Faster R-CNN (1333x750).
+#
+# Los GFLOPs son la medida de coste independiente de la implementación. Se
+# reportan SIEMPRE junto al FPS y a la resolución: sin las tres cifras, la
+# comparación de velocidad no es interpretable.
+#
+# Convención: GFLOPs = MACs x 2, la misma que usa Ultralytics. Validado contra
+# el valor publicado de YOLO11m (68.0 GFLOPs a 640 px).
+
+def eval_input_shape(model_name: str, img_size: int) -> tuple:
+    """(H, W) que ve realmente el modelo, partiendo de los 1280x720 nativos.
+
+    Replica lo que hace get_val_transform() -- y, en Faster R-CNN, lo que hace
+    GeneralizedRCNNTransform internamente, que es donde se decide de verdad.
+    """
+    W0, H0 = 1280, 720
+    if model_name == "ssd":
+        return 300, 300                      # square=True: deforma a 300x300
+    if model_name in ("faster_rcnn", "detr"):
+        short = 800 if model_name == "faster_rcnn" else img_size
+        s = short / min(H0, W0)
+        if s * max(H0, W0) > 1333:           # tope del lado largo
+            s = 1333 / max(H0, W0)
+        return int(H0 * s), int(W0 * s)
+    if model_name == "yolo11":
+        # OJO: en Ultralytics `imgsz` fija el lado LARGO, no el corto. Sobre
+        # 1280x720 la escala es 640/1280 = 0.5 y el resultado se rellena hasta
+        # el multiplo de stride 32: 640x384. No es lo mismo que el img_size de
+        # cnn_baseline, que fija el lado CORTO (escala 0.889).
+        sc = img_size / max(H0, W0)
+        h, w = int(round(H0 * sc)), int(round(W0 * sc))
+        return ((h + 31) // 32) * 32, ((w + 31) // 32) * 32
+    s = img_size / min(H0, W0)               # cnn_baseline: lado corto = img_size
+    return int(H0 * s), int(W0 * s)
+
+
+def model_complexity(model, model_name: str, img_size: int, device=None) -> dict:
+    """GFLOPs, millones de parámetros y resolución de entrada real.
+
+    Nunca aborta la evaluación: si el perfilado falla, devuelve None en la
+    métrica que no se pudo calcular y el resto del informe sigue igual.
+    """
+    import copy
+
+    H, W = eval_input_shape(model_name, img_size)
+    out = {"input_h": H, "input_w": W, "params_m": None, "gflops": None}
+    try:
+        out["params_m"] = round(sum(p.numel() for p in model.parameters()) / 1e6, 2)
+    except Exception:
+        pass
+    try:
+        import thop
+        net = copy.deepcopy(model).float().eval().cpu()
+        x = torch.zeros(1, 3, H, W)
+        # Los detectores de torchvision reciben una LISTA de tensores 3D.
+        inputs = ([x[0]],) if model_name in ("faster_rcnn", "ssd") else (x,)
+        macs, _ = thop.profile(net, inputs=inputs, verbose=False)
+        out["gflops"] = round(macs * 2 / 1e9, 1)
+    except Exception as e:
+        print(f"  [aviso] GFLOPs no calculables ({type(e).__name__}: {e})")
+    return out
+
 # ── Impresión de resultados ───────────────────────────────────────────────────
 
 def print_results(res: dict, class_names: list):
@@ -663,6 +801,14 @@ def print_results(res: dict, class_names: list):
     print(f"  IoU del match: {PR_IOU_THRESH}      ┘")
     print("-" * 66)
     print(f"  FPS:           {res['fps']:.1f}   (batch=1, forward+postproceso)")
+    _res = (f"{res['input_w']}x{res['input_h']}"
+            if res.get("input_w") else "n/d")
+    _gf  = f"{res['gflops']:.1f}" if res.get("gflops") else "n/d"
+    _pm  = f"{res['params_m']:.2f} M" if res.get("params_m") else "n/d"
+    print(f"  Resolución:    {_res}   (entrada real, desde 1280x720)")
+    print(f"  GFLOPs:        {_gf}   Parámetros: {_pm}")
+    print("  El FPS depende de la implementación y de la resolución;")
+    print("  los GFLOPs son la comparación de coste entre arquitecturas.")
     print("-" * 66)
     print("  AP@50-95 por tamaño de objeto (área en píxeles NATIVOS):")
     print(f"    small   (<32²  px) : {pct(res['map_small'])}")
@@ -717,17 +863,33 @@ def save_results(res: dict, class_names: list, model_name: str,
         "map_medium":  r2(res["map_medium"]),
         "map_large":   r2(res["map_large"]),
         "fps":         round(res["fps"], 1),
+        # Coste computacional. El FPS mezcla arquitectura, implementación y
+        # resolución; los GFLOPs aíslan la arquitectura. Van juntos siempre.
+        "gflops":      res.get("gflops"),
+        "params_m":    res.get("params_m"),
+        "input_h":     res.get("input_h"),
+        "input_w":     res.get("input_w"),
+        # AP por umbral de IoU (0.50:0.05:0.95), media sobre clases con GT.
+        # None en una posición = ningún umbral tuvo clase evaluable (no debería
+        # pasar con 10 clases y 2000 imágenes, pero se preserva por si acaso).
+        "iou_thresholds": res.get("iou_thresholds"),
+        "ap_por_iou":  [None if v is None else round(v * 100, 2)
+                        for v in (res.get("ap_por_iou") or [])],
         "per_class":   {},
     }
     # AP por clase junto al número de instancias evaluadas: permite juzgar la
     # fiabilidad de cada cifra sin excluir clases de la métrica principal.
     class_ap = res.get("class_ap", {})
     gt = res.get("gt_per_class", {})
+    pr_curve = res.get("pr_curve") or {}
     for i, name in enumerate(class_names):
         val = class_ap.get(i)
         out["per_class"][name] = {
             "ap50_95":     -100.0 if (val is None or val < 0) else round(val * 100, 2),
             "gt_instances": gt.get(i, 0),
+            # Curva P-R completa a IoU=0.5 (rejilla estándar COCO de 101 puntos
+            # de recall, 0..1); None si la clase no tenía GT evaluable.
+            "pr_curve_iou50": pr_curve.get(i),
         }
 
     json_path = Path(weights_path).parent / "eval_results.json"
@@ -771,9 +933,16 @@ def main():
                if args.config else {})
         img_size = cfg.get("training", {}).get("img_size", 640)
         print(f"Modelo  : yolo11    Pesos: {args.weights}")
-        print(f"img_size: {img_size}   Conf: {args.conf}  (común a todos)")
+        # conf y max_det SI son comunes a los 5 modelos; img_size NO: cada
+        # arquitectura corre en su resolución nativa y hay que declararlo.
+        print(f"img_size: {img_size}   Conf: {args.conf} (común)  max_det: {MAX_DET} (común)")
         res = evaluate_yolo(args.weights, images_val, labels_val,
                             nc=nc, conf=args.conf, imgsz=img_size)
+        try:
+            from ultralytics import YOLO as _Y
+            res.update(model_complexity(_Y(args.weights).model, "yolo11", img_size))
+        except Exception as e:
+            print(f"  [aviso] complejidad no calculable ({type(e).__name__}: {e})")
         print_results(res, CLASS_NAMES)
         save_results(res, CLASS_NAMES, "yolo11", args.weights, img_size, args.conf)
         return
@@ -788,7 +957,8 @@ def main():
     print(f"Modelo  : {args.model}")
     print(f"Pesos   : {args.weights}")
     print(f"Device  : {device}")
-    print(f"img_size: {img_size}   Conf: {args.conf}  (común a todos los modelos)")
+    # conf y max_det son comunes a los 5 modelos; img_size NO.
+    print(f"img_size: {img_size}   Conf: {args.conf} (común)  max_det: {MAX_DET} (común)")
 
     model  = load_model(args.model, cfg, args.weights, nc, device, conf=args.conf)
     val_tf = get_val_transform(args.model, img_size)
@@ -811,6 +981,7 @@ def main():
     res = evaluate_torchvision(
         model, loader, device, args.model, nc=nc, conf=args.conf
     )
+    res.update(model_complexity(model, args.model, img_size, device))
     print_results(res, CLASS_NAMES)
     save_results(res, CLASS_NAMES, args.model, args.weights, img_size, args.conf)
 

@@ -1,0 +1,347 @@
+{
+  "curva_yolo11m_8k": {
+    "model": "yolo11m",
+    "train_size": 8000,
+    "epochs_cap": 70,
+    "seed": 0,
+    "horas": 3.72,
+    "fecha": "2026-08-31T21:41:07",
+    "map50": 49.96,
+    "map50_95": 27.35,
+    "map_small": 11.4,
+    "map_medium": 35.42,
+    "map_large": 53.19,
+    "precision": 61.13,
+    "recall": 47.34,
+    "f1": 53.04,
+    "conf_max_f1": 0.2693,
+    "pr_iou": 0.5,
+    "fps": 89.0,
+    "img_size": 640,
+    "conf": 0.001,
+    "max_det": 100,
+    "per_class": {
+      "person": {
+        "ap50_95": 31.08,
+        "gt_instances": 2652
+      },
+      "rider": {
+        "ap50_95": 18.97,
+        "gt_instances": 146
+      },
+      "car": {
+        "ap50_95": 46.69,
+        "gt_instances": 20627
+      },
+      "truck": {
+        "ap50_95": 38.75,
+        "gt_instances": 868
+      },
+      "bus": {
+        "ap50_95": 38.82,
+        "gt_instances": 327
+      },
+      "train": {
+        "ap50_95": 3.37,
+        "gt_instances": 2
+      },
+      "motor": {
+        "ap50_95": 19.31,
+        "gt_instances": 85
+      },
+      "bike": {
+        "ap50_95": 19.71,
+        "gt_instances": 224
+      },
+      "traffic light": {
+        "ap50_95": 22.84,
+        "gt_instances": 5666
+      },
+      "traffic sign": {
+        "ap50_95": 33.99,
+        "gt_instances": 7162
+      }
+    },
+    "epochs_run": 70,
+    "best_epoch": 0,
+    "convergio": true,
+    "ganancia_ult10ep": -0.34,
+    "imgs_vistas": 560000
+  },
+  "curva_yolo11m_16k": {
+    "model": "yolo11m",
+    "train_size": 16000,
+    "epochs_cap": 50,
+    "seed": 0,
+    "horas": 5.14,
+    "fecha": "2026-09-01T02:49:32",
+    "map50": 51.24,
+    "map50_95": 28.71,
+    "map_small": 12.52,
+    "map_medium": 37.19,
+    "map_large": 55.83,
+    "precision": 73.81,
+    "recall": 47.63,
+    "f1": 54.16,
+    "conf_max_f1": 0.2843,
+    "pr_iou": 0.5,
+    "fps": 86.3,
+    "img_size": 640,
+    "conf": 0.001,
+    "max_det": 100,
+    "per_class": {
+      "person": {
+        "ap50_95": 32.14,
+        "gt_instances": 2652
+      },
+      "rider": {
+        "ap50_95": 19.93,
+        "gt_instances": 146
+      },
+      "car": {
+        "ap50_95": 47.57,
+        "gt_instances": 20627
+      },
+      "truck": {
+        "ap50_95": 40.99,
+        "gt_instances": 868
+      },
+      "bus": {
+        "ap50_95": 44.69,
+        "gt_instances": 327
+      },
+      "train": {
+        "ap50_95": 0.0,
+        "gt_instances": 2
+      },
+      "motor": {
+        "ap50_95": 23.27,
+        "gt_instances": 85
+      },
+      "bike": {
+        "ap50_95": 19.55,
+        "gt_instances": 224
+      },
+      "traffic light": {
+        "ap50_95": 23.63,
+        "gt_instances": 5666
+      },
+      "traffic sign": {
+        "ap50_95": 35.36,
+        "gt_instances": 7162
+      }
+    },
+    "epochs_run": 50,
+    "best_epoch": 0,
+    "convergio": true,
+    "ganancia_ult10ep": 0.07,
+    "imgs_vistas": 800000
+  },
+  "curva_yolo11m_32k": {
+    "model": "yolo11m",
+    "train_size": 32000,
+    "epochs_cap": 36,
+    "seed": 0,
+    "horas": 7.09,
+    "fecha": "2026-09-01T09:55:03",
+    "map50": 53.22,
+    "map50_95": 29.95,
+    "map_small": 12.11,
+    "map_medium": 38.63,
+    "map_large": 58.77,
+    "precision": 73.89,
+    "recall": 51.48,
+    "f1": 56.63,
+    "conf_max_f1": 0.2332,
+    "pr_iou": 0.5,
+    "fps": 87.3,
+    "img_size": 640,
+    "conf": 0.001,
+    "max_det": 100,
+    "per_class": {
+      "person": {
+        "ap50_95": 33.14,
+        "gt_instances": 2652
+      },
+      "rider": {
+        "ap50_95": 23.55,
+        "gt_instances": 146
+      },
+      "car": {
+        "ap50_95": 48.06,
+        "gt_instances": 20627
+      },
+      "truck": {
+        "ap50_95": 42.84,
+        "gt_instances": 868
+      },
+      "bus": {
+        "ap50_95": 45.38,
+        "gt_instances": 327
+      },
+      "train": {
+        "ap50_95": 0.0,
+        "gt_instances": 2
+      },
+      "motor": {
+        "ap50_95": 23.61,
+        "gt_instances": 85
+      },
+      "bike": {
+        "ap50_95": 21.77,
+        "gt_instances": 224
+      },
+      "traffic light": {
+        "ap50_95": 24.63,
+        "gt_instances": 5666
+      },
+      "traffic sign": {
+        "ap50_95": 36.47,
+        "gt_instances": 7162
+      }
+    },
+    "epochs_run": 36,
+    "best_epoch": 0,
+    "convergio": false,
+    "ganancia_ult10ep": 0.43,
+    "imgs_vistas": 1152000
+  },
+  "curva_cnn_baseline_8k": {
+    "model": "cnn_baseline",
+    "train_size": 8000,
+    "epochs_cap": 85,
+    "seed": 0,
+    "horas": 5.03,
+    "fecha": "2026-09-01T21:21:19",
+    "map50": 28.58,
+    "map50_95": 11.49,
+    "map_small": 7.35,
+    "map_medium": 16.84,
+    "map_large": 19.48,
+    "precision": 48.03,
+    "recall": 32.3,
+    "f1": 37.12,
+    "conf_max_f1": 0.3403,
+    "pr_iou": 0.5,
+    "fps": 64.1,
+    "img_size": 640,
+    "conf": 0.001,
+    "max_det": 100,
+    "per_class": {
+      "person": {
+        "ap50_95": 12.37,
+        "gt_instances": 2652
+      },
+      "rider": {
+        "ap50_95": 5.72,
+        "gt_instances": 146
+      },
+      "car": {
+        "ap50_95": 30.63,
+        "gt_instances": 20627
+      },
+      "truck": {
+        "ap50_95": 10.37,
+        "gt_instances": 868
+      },
+      "bus": {
+        "ap50_95": 5.84,
+        "gt_instances": 327
+      },
+      "train": {
+        "ap50_95": 0.0,
+        "gt_instances": 2
+      },
+      "motor": {
+        "ap50_95": 4.39,
+        "gt_instances": 85
+      },
+      "bike": {
+        "ap50_95": 7.74,
+        "gt_instances": 224
+      },
+      "traffic light": {
+        "ap50_95": 17.25,
+        "gt_instances": 5666
+      },
+      "traffic sign": {
+        "ap50_95": 20.62,
+        "gt_instances": 7162
+      }
+    },
+    "epochs_run": 43,
+    "best_epoch": 28,
+    "ganancia_ult10ep": 0.2,
+    "imgs_vistas": 344000,
+    "convergio": true
+  },
+  "curva_cnn_baseline_16k": {
+    "model": "cnn_baseline",
+    "train_size": 16000,
+    "epochs_cap": 58,
+    "seed": 0,
+    "horas": 9.05,
+    "fecha": "2026-09-02T06:34:45",
+    "map50": 34.57,
+    "map50_95": 14.2,
+    "map_small": 8.61,
+    "map_medium": 20.31,
+    "map_large": 26.81,
+    "precision": 49.97,
+    "recall": 40.19,
+    "f1": 43.9,
+    "conf_max_f1": 0.3554,
+    "pr_iou": 0.5,
+    "fps": 63.9,
+    "img_size": 640,
+    "conf": 0.001,
+    "max_det": 100,
+    "per_class": {
+      "person": {
+        "ap50_95": 15.49,
+        "gt_instances": 2652
+      },
+      "rider": {
+        "ap50_95": 8.04,
+        "gt_instances": 146
+      },
+      "car": {
+        "ap50_95": 33.95,
+        "gt_instances": 20627
+      },
+      "truck": {
+        "ap50_95": 13.2,
+        "gt_instances": 868
+      },
+      "bus": {
+        "ap50_95": 12.26,
+        "gt_instances": 327
+      },
+      "train": {
+        "ap50_95": 0.0,
+        "gt_instances": 2
+      },
+      "motor": {
+        "ap50_95": 5.89,
+        "gt_instances": 85
+      },
+      "bike": {
+        "ap50_95": 8.58,
+        "gt_instances": 224
+      },
+      "traffic light": {
+        "ap50_95": 19.63,
+        "gt_instances": 5666
+      },
+      "traffic sign": {
+        "ap50_95": 24.99,
+        "gt_instances": 7162
+      }
+    },
+    "epochs_run": 43,
+    "best_epoch": 28,
+    "ganancia_ult10ep": -0.59,
+    "imgs_vistas": 688000,
+    "convergio": true
+  }
+}

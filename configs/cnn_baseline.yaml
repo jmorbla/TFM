@@ -28,6 +28,13 @@ training:
   weight_decay: 0.0001
   lr_scheduler: cosine
   amp: true
+  # Sin clipping, el run de 32k reventó a NaN en la época 23 tras 22 épocas
+  # sanas (la pérdida bajaba suave: 0.2565 -> 0.2539). Es un pico de gradiente
+  # en un solo lote, no una divergencia progresiva. Este es el único detector
+  # denso del estudio con nivel P2 (363 840 anchors) y AMP activado: focal loss
+  # + fp16 + tantos anchors hacen que un pico puntual sature el rango de fp16.
+  # SSD lleva grad_clip por el mismo motivo; DETR usa clip_max_norm=0.1.
+  grad_clip: 10.0
 
 architecture:
   fpn_out_channels: 96

@@ -14,7 +14,9 @@ configs/bdd100k.yaml, sharing the same train/val split for a fair comparison.
 """
 
 import argparse
+import math
 import random
+import sys
 import shutil
 import time
 from datetime import datetime
@@ -174,7 +176,7 @@ def train_one_epoch(
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
         # torchvision detectors use 0 = background; dataset labels are 0-indexed
-        # → shift labels +1 so pedestrian=1, rider=2, …, traffic sign=10
+        # → shift labels +1 so person=1, rider=2, …, traffic sign=10
         if model_name in ("faster_rcnn", "ssd"):
             targets = [
                 {**t, "labels": t["labels"] + 1} for t in targets
@@ -263,6 +265,20 @@ def validate_one_epoch(
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
+
+
+# ── Consola: forzar UTF-8 ────────────────────────────────────────────────────
+# Este script imprime caracteres de caja y flechas. Cuando lo lanza una persona
+# desde una terminal moderna funciona, pero cuando lo lanza otro script por
+# subprocess la salida es una tubería y Python cae al encoding del sistema
+# (cp1252 en Windows), que no los admite: UnicodeEncodeError DESPUES de haber
+# hecho todo el trabajo. Se fuerza UTF-8 y, si el terminal no lo admite, se
+# degrada a reemplazar el carácter en vez de abortar.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 def main():
     parser = argparse.ArgumentParser()
@@ -422,6 +438,7 @@ def main():
     best_map   = -1.0
     best_epoch = -1
     epochs_sin_mejora = 0
+    diverged   = False
 
     for epoch in range(epochs):
         t0 = time.time()
@@ -430,6 +447,32 @@ def main():
             device, amp, args.model, writer, epoch,
             loss_fn=loss_fn, grad_clip=tr.get("grad_clip", 0.0),
         )
+        # ── Guardia anti-divergencia ─────────────────────────────────────────
+        # Una vez la pérdida es NaN, los pesos ya están corruptos y todas las
+        # épocas siguientes producen mAP=0. En el run de 32k de cnn_baseline eso
+        # supuso 11 épocas y ~4.1 h de GPU tiradas, y además last.pt acabó con
+        # 245 de 278 tensores a NaN. Abortamos y NO tocamos last.pt, de modo que
+        # el mejor checkpoint anterior a la divergencia queda intacto y usable.
+        if not math.isfinite(train_loss):
+            sep = "=" * 72
+            print("" + sep)
+            print(f"[ABORTADO] Perdida = {train_loss} en la epoca {epoch + 1}.")
+            print("El entrenamiento ha divergido. Las epocas siguientes solo")
+            print("producirian mAP=0 y sobrescribirian last.pt con pesos NaN.")
+            if best_epoch > 0:
+                print("")
+                print(f"best.pt SE CONSERVA intacto: epoca {best_epoch}, "
+                      f"mAP50-95={best_map * 100:.2f}%. Es un resultado valido,")
+                print("aunque una cota inferior: no llego a early stopping.")
+            else:
+                print("")
+                print("No se llego a guardar ningun best.pt.")
+            print("")
+            print("Antes de relanzar, revisa `grad_clip` en el config del modelo.")
+            print(sep)
+            diverged = True
+            break
+
         if scheduler:
             scheduler.step()
 
@@ -485,8 +528,12 @@ def main():
         {"best_val_map50_95": best_map},
     )
     writer.close()
-    print(f"\nEntrenamiento completado.")
+    estado = "ABORTADO POR DIVERGENCIA" if diverged else "completado"
+    print(f"\nEntrenamiento {estado}.")
     print(f"Mejor mAP@50-95 de validación: {best_map * 100:.2f}%  (época {best_epoch})")
+    if diverged:
+        print("AVISO: el run divergio antes de early stopping. Este mAP es una")
+        print("COTA INFERIOR y last.pt no se actualizo tras la ultima epoca sana.")
     print(f"Run guardado en: {run_dir.resolve()}")
 
 
