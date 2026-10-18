@@ -1,14 +1,14 @@
 """
-Anchor-based detection loss for CNNBaseline (and CNNGRUDetector).
+Pérdida de detección con anchors para CNNBaseline.
 
 Pipeline:
-  1. Generate anchors matching each FPN level's grid (3 anchors/cell × 3 levels).
-  2. Match each anchor to ground-truth boxes by IoU threshold.
-  3. Focal Loss  → classification  (handles the huge pos/neg imbalance).
-  4. Smooth-L1   → box regression  (only on positive anchors).
+  1. Genera los anchors de la rejilla de cada nivel FPN (6 anchors/celda × 4 niveles, P2-P5).
+  2. Asigna cada anchor a las cajas GT por umbral de IoU.
+  3. Focal Loss  → clasificación  (compensa el enorme desbalanceo pos/neg).
+  4. Smooth-L1   → regresión de cajas  (solo en anchors positivos).
 
-Reference sizes are for img_size=416; the code is resolution-agnostic because
-feature-map shapes are read directly from the model's output tensors.
+El código no depende de la resolución: las formas de los mapas de características
+se leen de los tensores de salida del modelo.
 """
 
 import math
@@ -19,22 +19,11 @@ import torch.nn.functional as F
 from torchvision.ops import box_iou
 
 
-# ── Anchor configuration (must match model.py) ───────────────────────────────
-#   _ANCHOR_BASE_SIZES[i] = geometric mean of (min,max) for FPN level i
-# Configuración derivada empíricamente del propio BDD100K.
-#
-# El dataset es, ante todo, un problema de objetos pequeños: traffic light
-# (16 px de mediana) y traffic sign (21 px) suman el 33 % de las instancias.
-#
-# Evolución de la cobertura de GT con IoU >= 0.5 (medida sobre 6 000 objetos):
-#   45/91/181 px, 3 anchors, P3-P5  ->  24.5 %   (configuración original)
-#   12/24/48 px, 6 anchors, P3-P5   ->  60.0 %
-#   8/16/32/64 px, 6 anchors, P2-P5 ->  87.5 %   (ésta, a 416 px)
-#                                       90.6 %   (a 640 px, la resolución actual)
-#
-# El nivel P2 (stride 4) es el que marca la diferencia y sale gratis del
-# backbone: mobilenet_v3_small.features[:2] ya produce stride 4, sólo había
-# que conectarlo a la FPN en lugar de descartarlo.
+# ── Configuración de anchors (debe coincidir con model.py) ───────────────────────────────
+# Tamaños base de 8/16/32/64 px en P2-P5, 6 anchors por celda. Cobertura de GT
+# con IoU >= 0.5: 90.7 % a 640 px (experiments/cnn_baseline_anclas_coste/
+# cobertura_anclas.py). El nivel P2 (stride 4) sale de
+# mobilenet_v3_small.features[:2].
 _ANCHOR_BASE_SIZES = [8.0, 16.0, 32.0, 64.0]   # niveles FPN P2-P5
 _ASPECT_RATIOS = [0.5, 1.0, 2.0]               # w/h — GT: p10=0.46, p50=1.11, p90=2.05
 _ANCHOR_SCALES = [1.0, 1.6]                    # 2 escalas por nivel
@@ -43,8 +32,6 @@ _STRIDES = [4, 8, 16, 32]
 # Anchors por celda = escalas × ratios.
 # model.py DEBE usar este valor como num_anchors, y evaluate.py para desaplanar.
 NUM_ANCHORS = len(_ANCHOR_SCALES) * len(_ASPECT_RATIOS)
-# Número de niveles de la FPN. model.py construye una entrada por cada uno.
-NUM_FPN_LEVELS = len(_STRIDES)
 
 # Prior de la focal loss (Lin et al. 2017, §4.1): probabilidad inicial que se
 # asigna a la clase positiva al inicializar el bias del head de clasificación.
@@ -56,14 +43,14 @@ FOCAL_ALPHA = 0.25
 FOCAL_GAMMA = 2.0
 
 
-# ── Anchor generation ─────────────────────────────────────────────────────────
+# ── Generación de anchors ─────────────────────────────────────────────────────────
 
 def _anchors_for_level(
     base_size: float, stride: int, fH: int, fW: int, device
 ) -> torch.Tensor:
     """
-    Returns (fH * fW * A, 4) anchors in xyxy image-pixel coords, A = NUM_ANCHORS.
-    Order: for every spatial cell (row-major), the A variants generated as
+    Devuelve (fH * fW * A, 4) anchors en xyxy (píxeles de imagen), A = NUM_ANCHORS.
+    Orden: para cada celda (por filas), las A variantes generadas como
     `for escala: for ratio:` — el mismo orden que asume el reshape de
     DetectionLoss.forward() y el de _cnn_postprocess() en evaluate.py.
     """
@@ -92,8 +79,8 @@ def generate_anchors(
     feature_shapes: list[tuple[int, int]], device
 ) -> torch.Tensor:
     """
-    All anchors for the 3 FPN levels concatenated: (N_total, 4) xyxy.
-    feature_shapes: [(fH0, fW0), (fH1, fW1), (fH2, fW2)]
+    Todos los anchors de los 4 niveles FPN (P2-P5) concatenados: (N_total, 4) xyxy.
+    feature_shapes: [(fH0, fW0), ..., (fH3, fW3)]
     """
     parts = []
     for i, (fH, fW) in enumerate(feature_shapes):
@@ -103,12 +90,12 @@ def generate_anchors(
     return torch.cat(parts, dim=0)
 
 
-# ── Box encoding / decoding ───────────────────────────────────────────────────
+# ── Codificación / decodificación de cajas ───────────────────────────────────────────────────
 
 def encode_boxes(gt_xyxy: torch.Tensor, anchors: torch.Tensor) -> torch.Tensor:
     """
-    Encode GT boxes as (tx, ty, tw, th) deltas relative to matched anchors.
-    Standard RCNN-style parameterisation.
+    Codifica las cajas GT como deltas (tx, ty, tw, th) respecto a sus anchors.
+    Parametrización estándar estilo R-CNN.
     """
     aw = (anchors[:, 2] - anchors[:, 0]).clamp(min=1e-6)
     ah = (anchors[:, 3] - anchors[:, 1]).clamp(min=1e-6)
@@ -137,8 +124,8 @@ def focal_loss(
     gamma: float = FOCAL_GAMMA,
 ) -> torch.Tensor:
     """
-    Binary focal loss summed over all entries.
-    logits/targets: (N, nc) — multi-label, one binary sigmoid per class.
+    Focal loss binaria, sumada sobre todas las entradas.
+    logits/targets: (N, nc) — multietiqueta, una sigmoide binaria por clase.
     valid_mask    : (N,) bool. Si se pasa, los anchors con False quedan
                     EXCLUIDOS de la pérdida (banda de ignorados). Es necesario
                     porque focal loss con gamma=2 amplifica precisamente los
@@ -154,18 +141,18 @@ def focal_loss(
     return loss.sum()
 
 
-# ── Main loss class ───────────────────────────────────────────────────────────
+# ── Clase de pérdida principal ───────────────────────────────────────────────────────────
 
 class DetectionLoss(nn.Module):
     """
-    Combined Focal + Smooth-L1 detection loss.
+    Pérdida de detección combinada Focal + Smooth-L1.
 
-    Accepts the raw outputs of CNNBaseline / CNNGRUDetector:
-        cls_preds: list of (B, A*nc, fH, fW)  — one tensor per FPN level
-        reg_preds: list of (B, A*4,  fH, fW)  — one tensor per FPN level
-        targets  : list of dicts {'boxes': (M,4) xyxy, 'labels': (M,)}
+    Recibe las salidas crudas de CNNBaseline:
+        cls_preds: lista de (B, A*nc, fH, fW)  — un tensor por nivel FPN
+        reg_preds: lista de (B, A*4,  fH, fW)  — un tensor por nivel FPN
+        targets  : lista de dicts {'boxes': (M,4) xyxy, 'labels': (M,)}
 
-    Returns a scalar loss tensor.
+    Devuelve un tensor escalar.
     """
 
     def __init__(self, nc: int = 10, lambda_reg: float = 1.0):
@@ -188,16 +175,16 @@ class DetectionLoss(nn.Module):
     ) -> torch.Tensor:
         B = cls_preds[0].shape[0]
         device = cls_preds[0].device
-        A = NUM_ANCHORS  # anchors per cell = escalas × ratios
+        A = NUM_ANCHORS  # anchors por celda = escalas × ratios
 
-        # ── Feature shapes & anchors ─────────────────────────────────────────
+        # ── Formas de los mapas y anchors ─────────────────────────────────────────
         feature_shapes = [(p.shape[2], p.shape[3]) for p in cls_preds]
         anchors = self._get_anchors(feature_shapes, device)  # (N_total, 4)
         N = anchors.shape[0]
 
-        # ── Reshape predictions to (B, N_total, nc) and (B, N_total, 4) ──────
-        # Conv output channels are ordered [a0_c0, ..., a0_c(nc-1), a1_c0, ...]
-        # i.e. A groups of nc — reshape to (B, A, nc, fH, fW) → (B, fH, fW, A, nc)
+        # ── Reordenar predicciones a (B, N_total, nc) y (B, N_total, 4) ──────
+        # Los canales de salida de la conv van ordenados [a0_c0, ..., a0_c(nc-1), a1_c0, ...]
+        # es decir, A grupos de nc — reshape a (B, A, nc, fH, fW) → (B, fH, fW, A, nc)
         cls_flat, reg_flat = [], []
         for cp, rp in zip(cls_preds, reg_preds):
             B_, _, fH, fW = cp.shape
@@ -224,12 +211,12 @@ class DetectionLoss(nn.Module):
             M = gt_boxes.shape[0]
 
             if M == 0:
-                # All anchors are background — only cls loss, no reg loss
+                # Todos los anchors son fondo — solo pérdida de clasificación
                 cls_tgt = torch.zeros(N, self.nc, device=device)
                 total_cls = total_cls + focal_loss(cls_all[b], cls_tgt)
                 continue
 
-            # ── IoU matching ─────────────────────────────────────────────────
+            # ── Asignación por IoU ─────────────────────────────────────────────────
             iou = box_iou(anchors, gt_boxes)        # (N, M)
             max_iou, best_gt = iou.max(dim=1)       # (N,)
 
@@ -237,11 +224,9 @@ class DetectionLoss(nn.Module):
             assigned_gt = best_gt.clone()           # GT que supervisa a cada anchor
 
             # Cada GT reclama su mejor anchor, garantizando que ningún objeto se
-            # quede sin supervisión (crítico: solo el 60 % de los GT de BDD100K
-            # alcanza IoU >= 0.5 con algún anchor).
-            # assigned_gt DEBE actualizarse a la vez que pos_mask; en caso
-            # contrario el anchor forzado aprendería la caja y la clase de OTRO
-            # objeto — el fallo que dejaba al 28.9 % de los GT sin supervisar.
+            # quede sin supervisión. assigned_gt se actualiza a la vez que
+            # pos_mask para que el anchor forzado aprenda la caja y la clase de
+            # SU objeto.
             best_anchor = iou.argmax(dim=0)                              # (M,)
             pos_mask[best_anchor] = True
             assigned_gt[best_anchor] = torch.arange(M, device=device)
@@ -256,14 +241,14 @@ class DetectionLoss(nn.Module):
             )
             valid_mask = ~ignore_mask
 
-            # ── Classification ────────────────────────────────────────────────
+            # ── Clasificación ────────────────────────────────────────────────
             cls_tgt = torch.zeros(N, self.nc, device=device)
             pos_idx = pos_mask.nonzero(as_tuple=True)[0]
             if len(pos_idx):
                 cls_tgt[pos_idx, gt_labels[assigned_gt[pos_idx]]] = 1.0
             total_cls = total_cls + focal_loss(cls_all[b], cls_tgt, valid_mask=valid_mask)
 
-            # ── Regression (positives only) ───────────────────────────────────
+            # ── Regresión (solo positivos) ───────────────────────────────────
             if len(pos_idx):
                 reg_tgt = encode_boxes(gt_boxes[assigned_gt[pos_idx]], anchors[pos_idx])
                 reg_loss = F.smooth_l1_loss(reg_all[b][pos_idx], reg_tgt, reduction="sum")

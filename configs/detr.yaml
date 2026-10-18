@@ -1,13 +1,7 @@
-model: detr
-variant: facebook/detr-resnet-50   # HuggingFace model id
-pretrained: true
+pretrained: true            # facebook/detr-resnet-50 (HuggingFace)
 
 training:
-  # Techo, no objetivo. En el run de 50 épocas la pérdida aún bajaba un 16.3 %
-  # en el último cuarto: claramente infraentrenado. Lo ideal serían 150+, pero
-  # DETR cuesta 15.2 min/época y ya se lleva el 50 % del presupuesto de GPU.
-  # AVISO: si el early stopping NO salta antes de la 100, el techo está
-  # limitando el resultado y hay que declararlo en la memoria.
+  # Techo de épocas; manda el early stopping.
   epochs: 100
   img_size: 800
   batch_size: 4
@@ -16,13 +10,5 @@ training:
   lr: 0.0001
   weight_decay: 0.0001
   lr_scheduler: step
-  lr_drop: 80             # escalado al nuevo techo (era 40 para 50 épocas)
+  lr_drop: 80
   amp: true
-  clip_max_norm: 0.1
-
-  # DETR needs many epochs to converge; consider gradient checkpointing
-  gradient_checkpointing: false
-
-inference:
-  score_threshold: 0.5
-  num_queries: 100        # object queries

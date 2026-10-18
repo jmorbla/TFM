@@ -1,7 +1,7 @@
 """
-YOLO11m fine-tuning on BDD100K via Ultralytics API.
+Fine-tuning de YOLO11m sobre BDD100K mediante la API de Ultralytics.
 
-Usage (desde tfm-comparativa/):
+Usage (desde la raíz del repositorio):
     python models/yolo11/train.py
     python models/yolo11/train.py --run_name yolo11m_run2
 """
@@ -29,16 +29,11 @@ def main():
                              "aparte usan la suya para no mezclar salidas)")
     parser.add_argument("--seed", type=int, default=0,
                         help="Semilla de reproducibilidad (fase final: 0, 1, 2)")
-    parser.add_argument("--lr", type=float, default=None,
-                        help="Sobrescribe training.lr0 del YAML (fase de tuning)")
     args = parser.parse_args()
 
     cfg = yaml.safe_load(Path(args.config).read_text(encoding="utf-8"))
     tr  = cfg["training"]
     aug = cfg.get("augmentation", {})
-
-    if args.lr is not None:
-        tr["lr0"] = args.lr
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_name  = args.run_name or f"yolo11m_{timestamp}"

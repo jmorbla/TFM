@@ -1,26 +1,24 @@
 """
-Custom CNN baseline: MobileNetV3-Small backbone + simple FPN neck + anchor-based head.
+CNN propia: backbone MobileNetV3-Small + cuello FPN simple + head con anchors.
 
-Designed to be the lightest possible detector that still demonstrates the
-backbone → neck → head paradigm described in the thesis (Section 3.2.4).
+Es el detector más ligero posible que aún sigue el esquema backbone → cuello → head.
 """
 
 import math
 
 import torch
 import torch.nn as nn
-import torchvision
 from torchvision.models import MobileNet_V3_Small_Weights, mobilenet_v3_small
 from torchvision.ops import FeaturePyramidNetwork
 
-from models.cnn_baseline.loss import FOCAL_PRIOR, NUM_ANCHORS, NUM_FPN_LEVELS
+from models.cnn_baseline.loss import FOCAL_PRIOR, NUM_ANCHORS
 
 
 class CNNBaseline(nn.Module):
     """
-    Single-stage detector (RetinaNet-style):
-        backbone: MobileNetV3-Small (pretrained on ImageNet)
-        neck    : 4-level FPN fusing layers at stride 4, 8, 16, 32 (P2-P5)
+    Detector de una etapa (estilo RetinaNet):
+        backbone: MobileNetV3-Small (preentrenado en ImageNet)
+        neck    : FPN de 4 niveles sobre los strides 4, 8, 16, 32 (P2-P5)
         head    : torre compartida de 4 convs + GroupNorm por rama, con el bias
                   de clasificación inicializado al prior de la focal loss
     """
@@ -36,24 +34,23 @@ class CNNBaseline(nn.Module):
         # ── Backbone ────────────────────────────────────────────────────────
         weights = MobileNet_V3_Small_Weights.IMAGENET1K_V1 if pretrained else None
         backbone = mobilenet_v3_small(weights=weights).features
-        # MobileNetV3-Small features channel/stride map (torchvision):
+        # Mapa de canales/stride de MobileNetV3-Small features (torchvision):
         #  [0]  Conv(3→16,  s2)
         #  [1]  IR(16→16,  s2)
-        #  [2]  IR(16→24,  s2)  cumulative stride 8
-        #  [3]  IR(24→24,  s1)  ← layer1 ends here: 24 ch, stride 8
-        #  [4]  IR(24→40,  s2)  cumulative stride 16
+        #  [2]  IR(16→24,  s2)  stride acumulado 8
+        #  [3]  IR(24→24,  s1)  ← aquí termina layer1: 24 ch, stride 8
+        #  [4]  IR(24→40,  s2)  stride acumulado 16
         #  [5]  IR(40→40,  s1)
         #  [6]  IR(40→40,  s1)
-        #  [7]  IR(40→48,  s1)  ← layer2 ends here: 48 ch, stride 16
+        #  [7]  IR(40→48,  s1)  ← aquí termina layer2: 48 ch, stride 16
         #  [8]  IR(48→48,  s1)
-        #  [9]  IR(48→96,  s2)  cumulative stride 32
+        #  [9]  IR(48→96,  s2)  stride acumulado 32
         #  [10] IR(96→96,  s1)
-        #  [11] IR(96→96,  s1)  ← layer3 ends here: 96 ch, stride 32
+        #  [11] IR(96→96,  s1)  ← aquí termina layer3: 96 ch, stride 32
         #  [12] Conv(96→576, s1) — expansión final; NO incluir (cambiaría canales de FPN)
-        # P2 (stride 4) NO se descarta: es el nivel donde viven la mayoría de los
-        # objetos de BDD100K. Incluirlo sube la cobertura de anchors del 60 % al
-        # 87.5 % y no añade capas nuevas — ya estaba en el backbone.
-        self.layer0 = backbone[:2]    # stride 4,  out: 16 ch  ← antes se tiraba
+        # P2 (stride 4) se conserva: es el nivel donde viven la mayoría de los
+        # objetos de BDD100K.
+        self.layer0 = backbone[:2]    # stride 4,  out: 16 ch
         self.layer1 = backbone[2:4]   # stride 8,  out: 24 ch
         self.layer2 = backbone[4:8]   # stride 16, out: 48 ch
         self.layer3 = backbone[8:12]  # stride 32, out: 96 ch

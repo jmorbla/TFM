@@ -1,44 +1,23 @@
-model: cnn_baseline
-# Lightweight custom CNN: backbone (MobileNetV3-Small) + FPN neck + anchor-free head
-backbone: mobilenet_v3_small
-pretrained_backbone: true
+pretrained_backbone: true   # MobileNetV3-Small preentrenado en ImageNet
 
+# Detector denso tipo RetinaNet: backbone MobileNetV3-Small + FPN P2-P5 + head
+# con anchors (ver models/cnn_baseline/).
 training:
-  # Techo, no objetivo. La convergencia del run anterior (30 épocas) NO sirve de
-  # referencia: los anchors se han rehecho por completo y la supervisión pasó
-  # del 71 % al 99 % de los objetos. Es el modelo más barato (1.6 min/época,
-  # 4 % del presupuesto), así que damos margen amplio.
+  # Techo de épocas; manda el early stopping.
   epochs: 100
-  # 640 px en vez de 416: a 416 el objeto mediano de BDD100K mide 16 px y el
-  # 49 % baja de esa cifra. A 640 sube a 25 px y la cobertura de anchors pasa
-  # del 87.5 % al 90.6 %. Además sitúa al modelo entre SSD300 y YOLO/DETR,
-  # rellenando el hueco de resolución de la comparativa.
+  # 640 px: sube el objeto mediano de 16 a 25 px respecto a 416 y la cobertura
+  # de anchors del 88.5 % al 90.7 %.
   img_size: 640
-  # Reducido de 32 a 8: el nivel P2 cuadruplica los anchors (363 840 a 640 px) y
-  # la torre de 4 convs del head se aplica sobre un mapa de 160x284 en P2.
-  # Medido en la RTX 5070 (8 GB) con la DetectionLoss real:
-  #   batch 16 -> 11.50 GB  DESBORDA a RAM del sistema, 99 min/época
-  #   batch  8 ->  5.85 GB  OK, 5.1 min/época
-  # Es el precio de usar P2 en un detector denso: RetinaNet usa P3-P7 justamente
-  # por esto. Faster R-CNN sí puede permitirse P2 porque su head corre sobre
-  # ~1000 RoIs dispersas, no sobre el mapa de características completo.
+  # Con P2 hay 363 840 anchors a 640 px. Medido en la RTX 5070 (8 GB) con la
+  # DetectionLoss real:
+  #   batch 16 -> 11.50 GB  desborda a RAM del sistema, 99 min/época
+  #   batch  8 ->  5.85 GB  5.1 min/época
   batch_size: 8
   optimizer: AdamW
   lr: 0.001
   weight_decay: 0.0001
   lr_scheduler: cosine
   amp: true
-  # Sin clipping, el run de 32k reventó a NaN en la época 23 tras 22 épocas
-  # sanas (la pérdida bajaba suave: 0.2565 -> 0.2539). Es un pico de gradiente
-  # en un solo lote, no una divergencia progresiva. Este es el único detector
-  # denso del estudio con nivel P2 (363 840 anchors) y AMP activado: focal loss
-  # + fp16 + tantos anchors hacen que un pico puntual sature el rango de fp16.
-  # SSD lleva grad_clip por el mismo motivo; DETR usa clip_max_norm=0.1.
+  # Clipping de gradiente: un pico en un solo lote con focal loss + fp16 + P2
+  # llevó a NaN un entrenamiento anterior. SSD usa el mismo valor.
   grad_clip: 10.0
-
-architecture:
-  fpn_out_channels: 96
-  head_channels: 128
-  # Informativo: el valor efectivo es NUM_ANCHORS en models/cnn_baseline/loss.py
-  # (2 escalas x 3 aspect ratios). Anchors base: 12/24/48 px para stride 8/16/32.
-  num_anchors: 6          # per scale (3 scales from FPN)

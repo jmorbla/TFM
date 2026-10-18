@@ -1,23 +1,21 @@
 model: yolo11m
-pretrained: true          # start from COCO weights
-weights: yolo11m.pt       # downloaded automatically by ultralytics
+pretrained: true          # parte de los pesos COCO
+weights: yolo11m.pt       # lo descarga ultralytics automáticamente
 
 training:
-  # Techo, no objetivo: el early stopping decide la época real.
-  # Medido en el run de 50 épocas: mejor mAP en la 48, 95 % del máximo ya en la
-  # 29 y 99 % en la 44 -> estaba en meseta. 80 da margen sin desperdiciar GPU.
+  # Techo de épocas; manda el early stopping.
   epochs: 80
   img_size: 640
   batch_size: 8
   optimizer: AdamW
   lr0: 0.001
-  lrf: 0.01               # final lr = lr0 * lrf
+  lrf: 0.01               # lr final = lr0 * lrf
   momentum: 0.937
   weight_decay: 0.0005
   warmup_epochs: 3
   cos_lr: true
-  amp: true               # automatic mixed precision (RTX 5070)
-  patience: 15            # early stopping — IDÉNTICO en los 5 modelos
+  amp: true               # precisión mixta automática (RTX 5070)
+  patience: 15            # parada temprana — IDÉNTICA en los 6 configs
   save_period: 5
 
 # ── Augmentación ─────────────────────────────────────────────────────────────

@@ -37,36 +37,18 @@ cells = []
 cells.append(md(r"""
 # AP por umbral de IoU y curvas Precision-Recall completas
 
-Dos vistas que el mAP@50-95 agregado esconde:
-
-1. **AP por umbral de IoU** (0.50 a 0.95): si la ventaja de un modelo se
-   concentra en los umbrales bajos, localiza objetos de forma aproximada; si se
-   mantiene en los altos, localiza con precisión fina. El mAP@50-95 es solo la
-   media de estos 10 valores.
-2. **Curva PR completa por clase a IoU=0.5**: el punto único de
-   Precision/Recall que ya reportáis (máximo F1) es una sola elección de
-   umbral de confianza; la curva completa muestra a qué precio (en precisión)
-   se compra cada nivel de recall.
+1. **AP por umbral de IoU** (0.50 a 0.95).
+2. **Curva PR completa por clase a IoU=0.5.**
 
 ## De dónde salen los datos
 
-`evaluate.py` ahora activa `extended_summary=True` en
-`torchmetrics.MeanAveragePrecision`, que expone los arrays crudos que
-pycocotools ya calculaba internamente para llegar al mAP agregado — **no
-cambia ninguna cifra existente** (verificado: mAP@50, mAP@50-95 y precision
-idénticos antes/después del cambio sobre `ssd_final_s0`). Los campos nuevos en
-`eval_results.json` son `ap_por_iou`, `iou_thresholds` y, por clase,
-`pr_curve_iou50` (curva a 101 puntos de recall, la rejilla estándar COCO).
+`evaluate.py` activa `extended_summary=True` en
+`torchmetrics.MeanAveragePrecision` y escribe en `eval_results.json` los campos
+`ap_por_iou`, `iou_thresholds` y, por clase, `pr_curve_iou50` (101 puntos de
+recall, rejilla estándar COCO). Esta curva (pycocotools) no es la del punto de
+máximo F1 de la tabla P/R/F1.
 
-**Esta curva PR (IoU=0.5, pycocotools) NO es la misma curva que ya sostiene la
-tabla de P/R/F1 en el punto de máximo F1** — esa es una réplica del criterio
-de Ultralytics con su propio emparejamiento. Coexisten con propósitos
-distintos; no son intercambiables ni deberían mezclarse en la misma frase de
-la memoria.
-
-**Aviso**: si algún run fue evaluado con la versión anterior de `evaluate.py`
-(sin estos campos), esta libreta lo omite y lo avisa — no rellena nada a mano.
-Re-evalúa ese run para que aparezca.
+Los runs evaluados sin estos campos se omiten y se avisa.
 """))
 
 cells.append(code(r"""
@@ -262,21 +244,6 @@ cells.append(md(r"""
 cells.append(code(r"""
 for p in sorted(FIG_DIR.glob("*.pdf")):
     print(p.name)
-"""))
-
-cells.append(md(r"""
-## Conclusiones para la memoria
-
-- **Faster R-CNN lidera en AP@IoU=0.50 (50.99%), pero su ventaja se diluye a
-  umbrales más exigentes**: en IoU=0.75 prácticamente empata con YOLO11m(A)
-  (23.68% vs 23.59%), y en IoU=0.95 YOLO11m(A) lo supera con claridad (1.48%
-  vs 0.23%). Su mAP agregado más alto viene sobre todo de una localización
-  más laxa, no de mayor precisión geométrica.
-- **Los 6 modelos caen a AP≈0-2% en IoU=0.95**: ninguno localiza con
-  precisión sub-píxel consistente a ese umbral — es un límite común a las 6
-  configuraciones, no algo que distinga a una arquitectura de las demás.
-- Calculado sobre los 18 runs completos, con la versión de `evaluate.py` que
-  expone `extended_summary=True` — no una muestra parcial.
 """))
 
 notebook = {

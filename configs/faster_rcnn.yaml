@@ -1,22 +1,13 @@
-model: faster_rcnn
-backbone: resnet50_fpn_v2
-pretrained: true          # COCO weights via torchvision
+pretrained: true          # pesos COCO de torchvision (resnet50_fpn_v2)
 
 training:
-  # Techo, no objetivo. En el run de 40 épocas la pérdida aún bajaba un 30 % en
-  # el último cuarto: NO había convergido. Es además el 2º modelo más caro
-  # (16.6 min/época), así que 60 es el equilibrio entre convergencia y GPU.
+  # Techo de épocas; manda el early stopping.
   epochs: 60
-  img_size: 800           # shorter edge; longer capped at 1333
-  batch_size: 4           # two-stage detector is heavier
+  img_size: 800           # informativo: lado corto; el lado largo se limita a 1333
+  batch_size: 4
   optimizer: SGD
   lr: 0.005
   momentum: 0.9
   weight_decay: 0.0005
-  lr_scheduler: cosine    # más suave que step; evita caídas bruscas con dataset pequeño
+  lr_scheduler: cosine
   amp: true
-
-inference:
-  score_threshold: 0.05
-  nms_threshold: 0.5
-  detections_per_img: 300

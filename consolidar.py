@@ -8,12 +8,16 @@ justo donde se cuela un error de transcripción imposible de encontrar después.
 
 Este script agrupa por configuración, agrega, deriva los campos calculados
 (ms/img, umbral de tiempo real, diferencia de la ablación) y emite las filas
-LaTeX listas para pegar en docs/resultados-y-discusion.tex.
+LaTeX listas para pegar en las tablas de la memoria.
 
 Uso (desde TFM/):
-    python consolidar.py                 # todas las tablas
+    python consolidar.py                 # todas las tablas (split val)
     python consolidar.py --tabla principal
     python consolidar.py --json resumen.json   # vuelca también el agregado
+    python consolidar.py --split test --json resumen_test.json
+        # agrega eval_results_test.json en vez de eval_results.json: el
+        # held-out nunca visto durante el desarrollo, como comprobación de
+        # generalización aparte de las tablas que ya usa la memoria.
 
 Dos comprobaciones de integridad que hace por su cuenta:
   - gt_instances debe ser IDÉNTICO en los 18 runs (mismo val). Si difiere, el
@@ -57,34 +61,35 @@ AP_NO_EVALUABLE = -100.0   # centinela de evaluate.py: clase sin GT ni prediccio
 
 # ── Localización y carga ─────────────────────────────────────────────────────
 
-def buscar_json(run_name: str):
-    """eval_results.json del run, esté donde esté.
+def buscar_json(run_name: str, filename: str = "eval_results.json"):
+    """<filename> del run, esté donde esté.
 
     Ultralytics no siempre respeta la ruta de `project`, así que además de las
-    ubicaciones previstas se busca por patrón.
+    ubicaciones previstas se busca por patrón. `filename` es
+    "eval_results.json" para val (default) o "eval_results_test.json" para
+    el held-out de test — ambos conviven en la misma carpeta de checkpoint.
     """
     cands = [
-        RUNS / "yolo11" / run_name / "weights" / "eval_results.json",
-        RUNS / "detect" / "runs" / "yolo11" / run_name / "weights" / "eval_results.json",
+        RUNS / "yolo11" / run_name / "weights" / filename,
     ]
-    cands += [p / run_name / "eval_results.json" for p in RUNS.glob("*") if p.is_dir()]
+    cands += [p / run_name / filename for p in RUNS.glob("*") if p.is_dir()]
     for c in cands:
         if c.exists():
             return c
-    for pat in (f"**/{run_name}/eval_results.json",
-                f"**/{run_name}/weights/eval_results.json"):
+    for pat in (f"**/{run_name}/{filename}",
+                f"**/{run_name}/weights/{filename}"):
         hit = sorted(RUNS.glob(pat))
         if hit:
             return hit[0]
     return None
 
 
-def cargar(prefijo: str) -> tuple:
+def cargar(prefijo: str, filename: str = "eval_results.json") -> tuple:
     """(lista de dicts de las semillas encontradas, lista de run_names ausentes)."""
     datos, faltan = [], []
     for s in SEMILLAS:
         name = f"{prefijo}_s{s}"
-        p = buscar_json(name)
+        p = buscar_json(name, filename)
         if p is None:
             faltan.append(name)
             continue
@@ -138,7 +143,7 @@ def campo_clase(datos: list, clase: str) -> tuple:
 
 # ── Comprobaciones de integridad ─────────────────────────────────────────────
 
-def verificar(todo: dict) -> bool:
+def verificar(todo: dict, split: str = "val") -> bool:
     print("\n" + "=" * 78)
     print("COMPROBACIONES DE INTEGRIDAD")
     print("=" * 78)
@@ -165,7 +170,7 @@ def verificar(todo: dict) -> bool:
     if ok:
         total = sum(v for v in refs.values() if v)
         print(f"  [OK] gt_instances coherente en los {len(planos)} runs "
-              f"({total} instancias de validación)")
+              f"({total} instancias de {split})")
 
     # protocolo comun
     for clave, esperado in (("conf", 0.001), ("max_det", 100)):
@@ -177,10 +182,15 @@ def verificar(todo: dict) -> bool:
         print(f"  [OK] protocolo uniforme: conf=0.001, max_det=100")
 
     # aviso sobre FPS
-    print("\n  [AVISO] El FPS de estos JSON procede de la evaluación de cada run.")
-    print("          Si NO se midieron los 18 runs en una sola sesión seguida,")
-    print("          esas cifras no son comparables entre sí y no deben ir a la")
-    print("          memoria (ver metodologia.tex, protocolo de consolidación).")
+    if split == "val":
+        print("\n  [AVISO] El FPS de estos JSON procede de la evaluación de cada run.")
+        print("          Si NO se midieron los 18 runs en una sola sesión seguida,")
+        print("          esas cifras no son comparables entre sí y no deben ir a la")
+        print("          memoria.")
+    else:
+        print(f"\n  [AVISO] Split '{split}': el FPS de estos JSON es un subproducto")
+        print("          de la evaluación, no se midió en sesión controlada y no")
+        print("          debe reportarse — el FPS oficial es el de la sesión sobre val.")
     return ok
 
 
@@ -300,18 +310,26 @@ TABLAS = {
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tabla", choices=list(TABLAS) + ["todas"], default="todas")
+    ap.add_argument("--split", choices=["val", "test"], default="val",
+                    help="val (default): las 18 evaluaciones que también "
+                         "deciden el early stopping. test: held-out nunca "
+                         "visto durante el desarrollo, para la comprobación "
+                         "de generalización aparte de las tablas de val.")
     ap.add_argument("--json", default=None,
                     help="Vuelca también el agregado a un fichero JSON")
     args = ap.parse_args()
 
+    filename = "eval_results.json" if args.split == "val" else "eval_results_test.json"
+
     todo, faltantes = {}, []
     for etq, prefijo in CONFIGS:
-        datos, faltan = cargar(prefijo)
+        datos, faltan = cargar(prefijo, filename)
         todo[etq] = datos
         faltantes += faltan
 
     hallados = sum(len(v) for v in todo.values())
-    print(f"Runs con eval_results.json: {hallados} / {len(CONFIGS) * len(SEMILLAS)}")
+    print(f"[split={args.split}] Runs con {filename}: "
+          f"{hallados} / {len(CONFIGS) * len(SEMILLAS)}")
     for etq, datos in todo.items():
         n = len(datos)
         marca = "OK" if n == len(SEMILLAS) else f"faltan {len(SEMILLAS) - n}"
@@ -321,13 +339,16 @@ def main():
         print("Las tablas se emiten igualmente con lo que haya; las")
         print("configuraciones con una sola semilla salen sin desviación típica.")
     if hallados == 0:
-        sys.exit("\nNo hay ningún eval_results.json. Ejecuta antes evaluate.py "
-                 "sobre los best.pt (ver docs/REGISTRO_ENTRENAMIENTOS.md).")
+        sys.exit(f"\nNo hay ningún {filename}. Ejecuta antes evaluate.py "
+                 f"sobre los best.pt con --split {args.split}.")
 
-    verificar(todo)
+    verificar(todo, args.split)
 
     print("\n" + "=" * 78)
-    print("FILAS LaTeX  —  copiar dentro del tabular correspondiente")
+    print(f"FILAS LaTeX (split={args.split})  —  copiar dentro del tabular correspondiente")
+    if args.split == "test":
+        print("Tablas de comprobación de generalización — NO sustituyen a las de val,")
+        print("van aparte.")
     print("=" * 78)
     for nombre, fn in TABLAS.items():
         if args.tabla in ("todas", nombre):

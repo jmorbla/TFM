@@ -21,7 +21,7 @@ from transformers import DetrConfig, DetrForObjectDetection
 def build_model(nc: int = 10, pretrained: bool = True) -> nn.Module:
     model_id = "facebook/detr-resnet-50"
     if pretrained:
-        # Load COCO-pretrained weights, then resize the classifier head
+        # Pesos preentrenados en COCO y se redimensiona el clasificador
         model = DetrForObjectDetection.from_pretrained(
             model_id,
             num_labels=nc,
@@ -36,12 +36,12 @@ def build_model(nc: int = 10, pretrained: bool = True) -> nn.Module:
 
 class DETRWrapper(nn.Module):
     """
-    Thin wrapper so the training loop can call model(pixel_values, targets)
-    the same way as torchvision detectors.
+    Envoltorio para que el bucle de entrenamiento llame a model(pixel_values, targets)
+    igual que con los detectores de torchvision.
 
-    HuggingFace DETR expects:
-        pixel_values: (B, 3, H, W) — already normalized
-        labels: list of dicts with 'class_labels' and 'boxes' (cx,cy,w,h normalized)
+    HuggingFace DETR espera:
+        pixel_values: (B, 3, H, W) — ya normalizado
+        labels: lista de dicts con 'class_labels' y 'boxes' (cx, cy, w, h normalizados)
     """
 
     def __init__(self, nc: int = 10, pretrained: bool = True):
@@ -65,8 +65,8 @@ class DETRWrapper(nn.Module):
         _, _, H, W = images.shape
         hf = []
         for t in targets:
-            boxes = t["boxes"]  # (N, 4) xyxy absolute
-            # → cxcywh normalized
+            boxes = t["boxes"]  # (N, 4) xyxy absolutas
+            # → cxcywh normalizadas
             cx = (boxes[:, 0] + boxes[:, 2]) / 2 / W
             cy = (boxes[:, 1] + boxes[:, 3]) / 2 / H
             w = (boxes[:, 2] - boxes[:, 0]) / W

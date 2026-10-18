@@ -1,22 +1,24 @@
 """
-Convert BDD100K per-image JSON labels → YOLO format (one .txt per image).
+Convierte las etiquetas JSON por imagen de BDD100K → formato YOLO (un .txt por imagen).
 
-BDD100K label structure (what we have):
+Estructura de etiquetas de BDD100K:
     bdd100k_labels/100k/train/<image_stem>.json
     bdd100k_labels/100k/val/<image_stem>.json
+    bdd100k_labels/100k/test/<image_stem>.json   # held-out, nunca usado en train/val
 
-Each JSON contains one frame with a list of objects. Only objects with
-a 'box2d' key and a category in CLASS_MAP are converted; lane/area
-annotations (poly2d only) are silently skipped.
+Cada JSON contiene un fotograma con una lista de objetos. Solo se convierten
+los objetos con clave 'box2d' y una categoría de CLASS_MAP; las anotaciones de
+carril/área (solo poly2d) se omiten sin aviso.
 
-Output (YOLO format):
+Salida (formato YOLO):
     bdd100k_labels_yolo/train/<image_stem>.txt
     bdd100k_labels_yolo/val/<image_stem>.txt
+    bdd100k_labels_yolo/test/<image_stem>.txt
 
-Usage (run from tfm-comparativa/):
+Uso (desde la raíz del repositorio):
     python data/prepare_bdd100k.py
-    python data/prepare_bdd100k.py --subset_train 8000 --subset_val 2000
-    python data/prepare_bdd100k.py --subset_train 0 --subset_val 0   # all images
+    python data/prepare_bdd100k.py --subset_train 8000 --subset_val 2000 --subset_test 2000
+    python data/prepare_bdd100k.py --subset_train 0 --subset_val 0 --subset_test 0  # todas las imágenes
 """
 
 import argparse
@@ -37,7 +39,7 @@ CLASS_MAP = {
     "traffic sign":  9,
 }
 
-IMG_W, IMG_H = 1280, 720  # BDD100K native resolution
+IMG_W, IMG_H = 1280, 720  # resolución nativa de BDD100K
 
 
 def box_to_yolo(x1: float, y1: float, x2: float, y2: float) -> tuple:
@@ -53,7 +55,7 @@ def box_to_yolo(x1: float, y1: float, x2: float, y2: float) -> tuple:
 
 
 def convert_json(json_path: Path) -> list[str]:
-    """Parse one BDD100K JSON and return YOLO label lines (may be empty)."""
+    """Lee un JSON de BDD100K y devuelve sus líneas de etiqueta YOLO (puede estar vacío)."""
     data = json.loads(json_path.read_text())
     frames = data.get("frames", [])
     if not frames:
@@ -82,13 +84,8 @@ def convert_split(ann_dir: Path, out_dir: Path, n_subset: int, seed: int = 42,
     total = len(json_files)
 
     if n_subset and n_subset < total:
-        # Barajado completo + prefijo, NO rng.sample(). Con shuffle+prefijo los
-        # subsets de distinto tamaño y misma semilla quedan ANIDADOS
-        # (8k ⊂ 16k ⊂ 32k), que es lo que exige una curva de aprendizaje: si no,
-        # al pasar de 8k a 16k cambiarían a la vez la cantidad Y la identidad de
-        # las imágenes, y la curva mezclaría los dos efectos.
-        # rng.sample(lista, k) NO cumple esto: para distintos k devuelve
-        # selecciones sin relación de inclusión entre sí.
+        # shuffle + prefijo (no rng.sample): subsets de distinto tamaño y misma
+        # semilla quedan anidados (8k ⊂ 16k ⊂ 32k).
         rng = random.Random(seed)
         rng.shuffle(json_files)
         json_files = json_files[:n_subset]
@@ -127,6 +124,7 @@ def main():
     parser.add_argument("--out_dir",      default="bdd100k_labels_yolo",   help="Output root for YOLO .txt files")
     parser.add_argument("--subset_train", type=int, default=8000,          help="Train images to sample (0 = all)")
     parser.add_argument("--subset_val",   type=int, default=2000,          help="Val images to sample (0 = all)")
+    parser.add_argument("--subset_test",  type=int, default=2000,          help="Test images to sample (0 = all)")
     parser.add_argument("--seed",         type=int, default=42)
     parser.add_argument("--no_clean",     action="store_true",
                         help="No borrar los .txt previos (arriesga mezclar muestreos)")
@@ -141,6 +139,9 @@ def main():
 
     print("Converting val split...")
     convert_split(ann / "val",   out / "val",   args.subset_val,   args.seed, clean)
+
+    print("Converting test split...")
+    convert_split(ann / "test",  out / "test",  args.subset_test,  args.seed, clean)
 
     print("\nDone. YOLO labels written to:", out.resolve())
 

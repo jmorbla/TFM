@@ -1,17 +1,26 @@
 """
-Evaluate any trained model on the BDD100K validation split.
+Evaluate any trained model on a BDD100K split (val por defecto).
 Reports mAP@50, mAP@50-95 (global y por clase) y FPS.
 
-Uso (desde tfm-comparativa/):
+--split val (default): la partición que también decide el early stopping.
+--split test: held-out nunca visto durante el desarrollo, para comprobar
+    generalización sin retocar nada después de verlo. Mismo protocolo
+    (conf/max_det/img_size) que val; escribe en eval_results_test.json
+    junto al checkpoint, sin tocar el eval_results.json de val.
+
+Uso (desde la raíz del repositorio):
 
     # YOLO11m
-    python evaluate.py --model yolo11 \
-        --weights runs/detect/runs/yolo11/yolo11m_20260805_210422/weights/best.pt
+    python evaluate.py --model yolo11 --config configs/yolo11m.yaml \
+        --weights runs/yolo11/<run>/weights/best.pt
+
+    # Cualquier modelo sobre el held-out de test
+    python evaluate.py --model ssd --split test \
+        --weights runs/ssd/<run>/best.pt --config configs/ssd.yaml
 
     # Faster R-CNN
     python evaluate.py --model faster_rcnn \
-        --weights runs/faster_rcnn/faster_rcnn_20260814_111431/best.pt \
-        --config configs/faster_rcnn.yaml
+        --weights runs/faster_rcnn/<run>/best.pt --config configs/faster_rcnn.yaml
 
     # SSD
     python evaluate.py --model ssd \
@@ -24,10 +33,6 @@ Uso (desde tfm-comparativa/):
     # CNN Baseline
     python evaluate.py --model cnn_baseline \
         --weights runs/cnn_baseline/<run>/best.pt --config configs/cnn_baseline.yaml
-
-    # CNN+GRU
-    python evaluate.py --model cnn_gru \
-        --weights runs/cnn_gru/<run>/best.pt --config configs/cnn_gru.yaml
 
 Nota FPS: se mide con batch_size=1 para reflejar la latencia real de
 inferencia imagen a imagen. Pasar --batch_size N mide throughput de batch.
@@ -47,10 +52,8 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 
-from data.dataset import BDD100KDetection, BDD100KSequence
+from data.dataset import BDD100KDetection
 from data.transforms import build_transforms
-
-# ── Constantes ────────────────────────────────────────────────────────────────
 
 # ── Consola: forzar UTF-8 ────────────────────────────────────────────────────
 # Este script imprime caracteres de caja y flechas. Cuando lo lanza una persona
@@ -65,30 +68,16 @@ for _stream in (sys.stdout, sys.stderr):
     except Exception:
         pass
 
+# ── Constantes ────────────────────────────────────────────────────────────────
+
 CLASS_NAMES = [
     "person", "rider", "car", "truck", "bus",
     "train", "motor", "bike", "traffic light", "traffic sign",
 ]
 
-# ── Sobre el desbalanceo de clases ───────────────────────────────────────────
-# BDD100K está fuertemente desbalanceado: 'car' es el 55 % de las instancias y
-# 'train' aparece en solo 14 de las 10 000 imágenes de validación (15 instancias
-# en total). Es un límite del dataset, no del muestreo: ninguna semilla ni
-# estrategia de muestreo lo corrige (ver notebooks/01_desbalanceo_clases.ipynb).
-#
-# NO se excluye ninguna clase de la métrica. El mAP se calcula sobre las 10,
-# que es el estándar de BDD100K y lo que hace comparable el trabajo con la
-# literatura. En su lugar, se reporta el número de instancias de GT junto al AP
-# de cada clase, para que la fiabilidad de cada cifra sea evidente sin necesidad
-# de descartar nada.
 DEVICE_TYPE = "cuda" if torch.cuda.is_available() else "cpu"
-YOLO_DATA_YAML = "bdd100k_yolo.yaml"   # YAML en formato Ultralytics
 
 # ── Protocolo de evaluación común a TODOS los modelos ────────────────────────
-# El mAP integra la curva precisión-recall completa. Si cada arquitectura filtra
-# sus predicciones a un umbral distinto, la curva queda truncada en un punto
-# distinto y los mAP dejan de ser comparables entre sí. Antes convivían cuatro
-# umbrales (DETR 0.5, CNN 0.3, Faster R-CNN 0.05, YOLO 0.001); ahora uno solo.
 DEFAULT_CONF = 0.001      # umbral de confianza único (convención COCO/Ultralytics)
 # Detecciones máximas por imagen. 100 es la convención COCO y además el tope que
 # torchmetrics aplica por defecto: si aquí se pusiera 300, torchmetrics seguiría
@@ -96,7 +85,6 @@ DEFAULT_CONF = 0.001      # umbral de confianza único (convención COCO/Ultraly
 # justo la asimetría que este protocolo elimina. Se pasa explícito a ambos.
 MAX_DET = 100
 MAX_DET_THRESHOLDS = [1, 10, MAX_DET]   # para MeanAveragePrecision
-PR_SCORE_THRESH = 0.5     # umbral de operación para Precision/Recall puntuales
 PR_IOU_THRESH = 0.5
 WARMUP_BATCHES = 10       # descartados del cronómetro (cuDNN autotune, init CUDA)
 _TOPK_PRE_NMS = 1000      # candidatos que entran al NMS en los modelos CNN propios
@@ -126,22 +114,13 @@ def load_model(model_name: str, cfg: dict, weights_path: str, nc: int, device,
         model = build_model(nc=nc, pretrained=False)
         model.score_thresh = conf
         model.detections_per_img = MAX_DET
+        model.nms_thresh = 0.5          # torchvision usa 0.45 por defecto
     elif model_name == "detr":
         from models.detr.model import DETRWrapper
         model = DETRWrapper(nc=nc, pretrained=False)
     elif model_name == "cnn_baseline":
         from models.cnn_baseline.model import build_model
         model = build_model(nc=nc, pretrained=False)
-    elif model_name == "cnn_gru":
-        from models.cnn_gru.model import build_model
-        seq = cfg.get("sequence", {})
-        gru = cfg.get("gru", {})
-        model = build_model(
-            nc=nc,
-            T=seq.get("T", 4),
-            gru_hidden=gru.get("hidden_size", 256),
-            pretrained=False,
-        )
     else:
         raise ValueError(f"Modelo desconocido: {model_name}")
 
@@ -195,9 +174,7 @@ class DetectionEvaluator:
 
     Precision, Recall y F1 se calculan en el punto de MÁXIMO F1 de la curva,
     que es el punto de operación que Ultralytics reporta para YOLO
-    (ultralytics/utils/metrics.py:839). Antes se usaba un umbral fijo de 0.5
-    para los modelos torch mientras YOLO usaba el máximo-F1: las columnas de
-    P y R de la tabla no eran comparables entre sí.
+    (ultralytics/utils/metrics.py:839).
     """
 
     N_CONF_POINTS = 1000   # rejilla de confianza, igual que Ultralytics
@@ -300,17 +277,11 @@ class DetectionEvaluator:
         `res["precision"]` tiene forma (T, R, K, A, M): T=10 umbrales de IoU
         (0.50:0.05:0.95), R=101 puntos de recall (rejilla estándar COCO
         0..1), K=clases vistas, A=4 rangos de área (se usa 0="all"),
-        M=3 topes de detecciones por imagen (se usa el último = 100, igual
-        que en el resto del protocolo). -1 marca "clase sin GT en esa celda"
-        (convención COCO) y se enmascara antes de promediar -- promediar el
-        -1 tal cual, como con el centinela de evaluate.py, destrozaría la
-        media.
+        M=3 topes de detecciones por imagen (se usa el último = 100).
+        -1 marca "clase sin GT en esa celda" y se enmascara antes de promediar.
 
-        La curva PR usa el mismo IoU=0.5 que ya reporta `map50`, pero NO es
-        la misma curva que `_pr_at_max_f1()`: esta es el cálculo estándar de
-        pycocotools (interpolación a 101 puntos de recall fijos); la de
-        `_pr_at_max_f1` es una réplica del criterio de Ultralytics para el
-        punto de máximo F1. Coexisten con propósitos distintos.
+        La curva PR es la de pycocotools (101 puntos de recall a IoU=0.5), no
+        la de `_pr_at_max_f1()`.
         """
         prec = res.get("precision")
         classes = res.get("classes")
@@ -403,9 +374,9 @@ def postprocess_predictions(preds_raw, model_name: str, imgs_t, device,
         return out
     if model_name == "detr":
         return _detr_postprocess(preds_raw, imgs_t, conf=conf)
-    if model_name in ("cnn_baseline", "cnn_gru"):
+    if model_name == "cnn_baseline":
         cls_preds, reg_preds = preds_raw
-        # imgs_t: (B,3,H,W) para baseline; (B,T,3,H,W) para gru → shape[-2:] = (H,W)
+        # imgs_t: (B,3,H,W) → shape[-2:] = (H,W)
         return _cnn_postprocess(
             cls_preds, reg_preds, imgs_t.shape[-2:], device, score_thresh=conf
         )
@@ -422,9 +393,8 @@ def evaluate_torchvision(model, loader, device, model_name: str, nc: int = 10,
     Faster R-CNN / SSD devuelven labels 1-indexed (0 = background).
     Restamos 1 y filtramos fondo para alinearlos con los 0-indexed del GT.
 
-    Además de mAP, calcula Precision y Recall globales a umbral fijo
-    (IoU ≥ 0.5, score ≥ 0.5) mediante PRAccumulator para que sean
-    comparables con los valores que reporta Ultralytics para YOLO11m.
+    Además de mAP, DetectionEvaluator calcula Precision, Recall y F1 en el
+    punto de máximo F1 (criterio de Ultralytics).
 
     nc : número de clases (sin contar background).  Se usa para construir
          el mapa correcto clase→AP tras metric.compute().
@@ -432,10 +402,7 @@ def evaluate_torchvision(model, loader, device, model_name: str, nc: int = 10,
     Protocolo de medición de FPS
     ----------------------------
     El cronómetro cubre forward + postproceso, con torch.cuda.synchronize() a
-    ambos lados y descartando WARMUP_BATCHES iteraciones iniciales. Antes se
-    medía solo el forward, lo que favorecía a cnn_baseline/cnn_gru: su NMS y su
-    decodificación de anchors quedaban fuera del reloj mientras que el NMS
-    interno de Faster R-CNN y SSD sí se contabilizaba.
+    ambos lados y descartando WARMUP_BATCHES iteraciones iniciales.
 
     NOTA sobre torchmetrics:
         map_per_class NO está indexado por label numérico (0..nc-1) sino
@@ -449,7 +416,7 @@ def evaluate_torchvision(model, loader, device, model_name: str, nc: int = 10,
     on_cuda = DEVICE_TYPE == "cuda"
 
     for i, (imgs, targets) in enumerate(tqdm(loader, desc="Evaluando")):
-        if model_name in ("cnn_gru", "detr", "cnn_baseline"):
+        if model_name in ("detr", "cnn_baseline"):
             # Estos modelos esperan un tensor (B, 3, H, W) en lugar de lista
             imgs_t = torch.stack([img.to(device) for img in imgs])
         else:
@@ -518,11 +485,7 @@ _DETR_PROCESSOR = None
 
 
 def _get_detr_processor():
-    """DetrImageProcessor cacheado.
-
-    Antes se reconstruía con from_pretrained() en CADA batch: además de ser
-    lento, contaminaba la medición de tiempos de DETR con E/S de disco.
-    """
+    """DetrImageProcessor cacheado, para no leer de disco en cada batch."""
     global _DETR_PROCESSOR
     if _DETR_PROCESSOR is None:
         from transformers import DetrImageProcessor
@@ -564,7 +527,7 @@ def _cnn_postprocess(
     nc: int = 10,
 ) -> list:
     """
-    Decodifica las salidas brutas de CNNBaseline / CNNGRUDetector.
+    Decodifica las salidas brutas de CNNBaseline.
 
     cls_preds : list de tensors (B, A*nc, fH, fW) — uno por nivel FPN
     reg_preds : list de tensors (B, A*4,  fH, fW) — uno por nivel FPN
@@ -630,15 +593,14 @@ def _cnn_postprocess(
         keep = scores_b >= score_thresh
         scores_b = scores_b[keep];  labels_b = labels_b[keep];  boxes_b = boxes_b[keep]
 
-        # Con score_thresh=0.001 sobreviven decenas de miles de anchors; recortar
-        # a los mejores antes del NMS mantiene el coste acotado sin alterar el mAP.
+        # Con score_thresh=0.001 sobreviven decenas de miles de anchors; se
+        # recorta a los mejores antes del NMS para acotar el coste.
         if scores_b.numel() > _TOPK_PRE_NMS:
             top = scores_b.topk(_TOPK_PRE_NMS).indices
             scores_b = scores_b[top]; labels_b = labels_b[top]; boxes_b = boxes_b[top]
 
         if scores_b.numel() > 0:
             # batched_nms aplica el NMS de forma independiente por clase.
-            # Con nms() a secas, un coche podía suprimir un semáforo solapado.
             nms_keep = tv_batched_nms(boxes_b, scores_b, labels_b, nms_iou)[:MAX_DET]
             scores_b = scores_b[nms_keep]
             labels_b = labels_b[nms_keep]
@@ -720,17 +682,6 @@ def evaluate_yolo(weights: str, images_dir: str, labels_dir: str,
 
 
 # ── Complejidad del modelo: GFLOPs, parámetros y resolución real ─────────────
-# El FPS por sí solo NO separa arquitectura de ingeniería. YOLO viene de
-# Ultralytics (convoluciones fusionadas, NMS optimizado), Faster R-CNN y SSD de
-# las implementaciones de referencia de torchvision, y DETR de HuggingFace: la
-# calidad de implementación entra en el cronómetro. Y cada modelo corre a su
-# resolución nativa, con ~11x de diferencia en píxeles entre SSD300 (300x300) y
-# Faster R-CNN (1333x750).
-#
-# Los GFLOPs son la medida de coste independiente de la implementación. Se
-# reportan SIEMPRE junto al FPS y a la resolución: sin las tres cifras, la
-# comparación de velocidad no es interpretable.
-#
 # Convención: GFLOPs = MACs x 2, la misma que usa Ultralytics. Validado contra
 # el valor publicado de YOLO11m (68.0 GFLOPs a 640 px).
 
@@ -750,10 +701,8 @@ def eval_input_shape(model_name: str, img_size: int) -> tuple:
             s = 1333 / max(H0, W0)
         return int(H0 * s), int(W0 * s)
     if model_name == "yolo11":
-        # OJO: en Ultralytics `imgsz` fija el lado LARGO, no el corto. Sobre
-        # 1280x720 la escala es 640/1280 = 0.5 y el resultado se rellena hasta
-        # el multiplo de stride 32: 640x384. No es lo mismo que el img_size de
-        # cnn_baseline, que fija el lado CORTO (escala 0.889).
+        # En Ultralytics `imgsz` fija el lado LARGO (640/1280 = 0.5) y se
+        # rellena hasta el múltiplo de stride 32: 640x384.
         sc = img_size / max(H0, W0)
         h, w = int(round(H0 * sc)), int(round(W0 * sc))
         return ((h + 31) // 32) * 32, ((w + 31) // 32) * 32
@@ -833,16 +782,23 @@ def print_results(res: dict, class_names: list):
 
 
 def save_results(res: dict, class_names: list, model_name: str,
-                 weights_path: str, img_size, conf: float):
+                 weights_path: str, img_size, conf: float, split: str = "val"):
     """Guarda las métricas en un JSON junto al checkpoint evaluado.
 
     Las clases sin instancias en GT ni en predicciones se marcan como -100
     (sentinel de "clase no evaluable"; distinto de 0 = detectado 0 %).
+
+    El fichero de salida es `eval_results.json` para split="val" (nombre
+    histórico, no romper lo que ya lee consolidar.py) y
+    `eval_results_<split>.json` para cualquier otro split (p.ej. "test"),
+    de modo que una pasada sobre test nunca sobreescribe el resultado de val
+    ya calculado para ese mismo checkpoint.
     """
     r2 = lambda v: None if v != v else round(v * 100, 2)   # NaN -> null en JSON
     out = {
         "model":      model_name,
         "weights":    weights_path,
+        "split":      split,
         # Resolución de entrada: variable de primer nivel de la comparativa.
         # Determina el tamaño aparente de los objetos y hay que reportarla
         # junto al mAP, no como detalle de configuración.
@@ -892,7 +848,8 @@ def save_results(res: dict, class_names: list, model_name: str,
             "pr_curve_iou50": pr_curve.get(i),
         }
 
-    json_path = Path(weights_path).parent / "eval_results.json"
+    suffix = "" if split == "val" else f"_{split}"
+    json_path = Path(weights_path).parent / f"eval_results{suffix}.json"
     json_path.write_text(json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"\nResultados guardados en: {json_path}")
 
@@ -901,15 +858,21 @@ def save_results(res: dict, class_names: list, model_name: str,
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Evalúa un modelo entrenado sobre la partición val de BDD100K."
+        description="Evalúa un modelo entrenado sobre una partición de BDD100K (val por defecto)."
     )
     parser.add_argument(
         "--model", required=True,
-        choices=["yolo11", "faster_rcnn", "ssd", "detr", "cnn_baseline", "cnn_gru"],
+        choices=["yolo11", "faster_rcnn", "ssd", "detr", "cnn_baseline"],
     )
     parser.add_argument("--weights", required=True,  help="Ruta al checkpoint best.pt")
     parser.add_argument("--config",  default=None,   help="YAML de config del modelo")
     parser.add_argument("--data",    default="configs/bdd100k.yaml")
+    parser.add_argument("--split",   default="val", choices=["val", "test"],
+                        help="Partición a evaluar. 'val' (default) es la que "
+                             "también decide el early stopping; 'test' es un "
+                             "held-out nunca visto durante el desarrollo, para "
+                             "comprobar generalización. No cambia nada más del "
+                             "protocolo (mismo conf/max_det/img_size).")
     parser.add_argument("--batch_size", type=int, default=1,
                         help="Batch de inferencia (default=1 para FPS real)")
     parser.add_argument("--conf", type=float, default=DEFAULT_CONF,
@@ -923,8 +886,8 @@ def main():
     if bdd["dataset"]["images_dir"] is None:
         raise ValueError("Configura dataset.images_dir en configs/bdd100k.yaml")
     nc = bdd["dataset"]["nc"]
-    images_val = str(Path(bdd["dataset"]["images_dir"]) / "val")
-    labels_val = str(Path(bdd["dataset"]["labels_dir"]) / "val")
+    images_val = str(Path(bdd["dataset"]["images_dir"]) / args.split)
+    labels_val = str(Path(bdd["dataset"]["labels_dir"]) / args.split)
 
     # YOLO predice con su propio preprocesado pero las métricas las calcula el
     # mismo acumulador que las del resto de modelos.
@@ -944,7 +907,8 @@ def main():
         except Exception as e:
             print(f"  [aviso] complejidad no calculable ({type(e).__name__}: {e})")
         print_results(res, CLASS_NAMES)
-        save_results(res, CLASS_NAMES, "yolo11", args.weights, img_size, args.conf)
+        save_results(res, CLASS_NAMES, "yolo11", args.weights, img_size, args.conf,
+                     split=args.split)
         return
 
     if args.config is None:
@@ -963,27 +927,21 @@ def main():
     model  = load_model(args.model, cfg, args.weights, nc, device, conf=args.conf)
     val_tf = get_val_transform(args.model, img_size)
 
-    if args.model == "cnn_gru":
-        seq = cfg.get("sequence", {})
-        val_ds = BDD100KSequence(
-            images_val, labels_val,
-            T=seq.get("T", 4), transforms=val_tf,
-        )
-    else:
-        val_ds = BDD100KDetection(images_val, labels_val, transforms=val_tf)
+    val_ds = BDD100KDetection(images_val, labels_val, transforms=val_tf)
 
     loader = DataLoader(
         val_ds, batch_size=args.batch_size, shuffle=False,
         num_workers=2, collate_fn=collate_fn, pin_memory=(DEVICE_TYPE == "cuda"),
     )
-    print(f"Val set : {len(val_ds)} imágenes  |  Batch: {args.batch_size}")
+    print(f"Split ({args.split}): {len(val_ds)} imágenes  |  Batch: {args.batch_size}")
 
     res = evaluate_torchvision(
         model, loader, device, args.model, nc=nc, conf=args.conf
     )
     res.update(model_complexity(model, args.model, img_size, device))
     print_results(res, CLASS_NAMES)
-    save_results(res, CLASS_NAMES, args.model, args.weights, img_size, args.conf)
+    save_results(res, CLASS_NAMES, args.model, args.weights, img_size, args.conf,
+                 split=args.split)
 
 
 if __name__ == "__main__":

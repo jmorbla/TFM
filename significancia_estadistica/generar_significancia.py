@@ -50,32 +50,11 @@ cells = []
 cells.append(md(r"""
 # Significancia estadística entre modelos
 
-`REGISTRO_ENTRENAMIENTOS.md` declara explícitamente: *"sin barra de error no se
-puede afirmar que un modelo supere a otro"* — y hasta ahora esa barra ha sido
-media ± desviación típica (±1σ), que **no es un test de significancia**, solo
-una medida de dispersión. Este notebook da el paso siguiente: comparar cada par
-de modelos con un test formal.
+Compara las 3 semillas de cada configuración sobre el mAP@50-95.
 
-## Metodología (por qué dos métodos distintos)
-
-- **Entre arquitecturas distintas** (los 15 pares posibles entre las 6
-  configuraciones): **test de Welch, no pareado**. La semilla de un modelo no
-  tiene relación con la de otro — "semilla 0" en SSD y "semilla 0" en DETR son
-  ensayos independientes; emparejarlos por índice sería metodológicamente
-  inválido (inflaría artificialmente la potencia).
-- **YOLO11m variante A vs variante B**: caso especial, con **test pareado**.
-  Es la misma arquitectura con el mismo seed = misma inicialización de pesos y
-  mismo orden de datos antes de aplicar la augmentación; solo cambia la
-  augmentación. Aquí el pareamiento por semilla es real, y un test pareado es
-  más potente que uno no pareado con la misma n.
-
-## Aviso de potencia estadística
-
-Con **n=3 por grupo**, los grados de libertad son mínimos (2 en el pareado, entre
-2 y 4 en Welch según las varianzas). Un p-valor no significativo **no prueba
-que no haya diferencia** — solo que con 3 semillas no hay potencia para
-detectarla. Por eso cada comparación incluye también el tamaño del efecto
-(Cohen's d), que no depende del tamaño muestral.
+- **Entre arquitecturas distintas** (15 pares): test de Welch no pareado.
+- **YOLO11m A vs B**: test t pareado por semilla (misma inicialización).
+- Se reporta también el tamaño del efecto (d de Cohen).
 """))
 
 cells.append(code(r"""
@@ -329,43 +308,9 @@ print(f"\nVeredicto: la augmentación completa (A) produce una diferencia {vered
       f"frente a solo flip (B), en mAP@50-95.")
 """))
 
-cells.append(md(r"""
-## Resumen para la memoria
-
-- Usa el **forest plot** (Figura 1) como la vista principal — es más honesta que
-  un bar+std porque muestra las 3 semillas individuales, no solo el resumen.
-- La **matriz de p-valores** (Figura 2) respalda cualquier frase del tipo "el
-  modelo X supera significativamente al Y"; para las que salgan en gris, la
-  frase correcta es "X obtiene mayor mAP que Y, aunque la diferencia no alcanza
-  significancia estadística con 3 semillas (d de Cohen = ...)", nunca "empatan".
-- El resultado de la ablación YOLO A vs B es el único con test pareado — cítalo
-  aparte del resto, con la justificación del pareamiento (mismo seed = misma
-  inicialización).
-- Declara la potencia estadística limitada (n=3, df=2-4) como lo que ya hábeis
-  apuntado en `metodologia.tex` — este notebook es la evidencia cuantitativa de
-  esa limitación, no una forma de esquivarla.
-"""))
-
 cells.append(code(r"""
 for p in sorted(FIG_DIR.glob("*.pdf")):
     print(p.name)
-"""))
-
-cells.append(md(r"""
-## Conclusiones para la memoria
-
-- **Los 15 pares de las 6 configuraciones salen estadísticamente
-  significativos (p<0.05) en mAP@50-95**, incluidos los más cercanos:
-  YOLO11m(A) vs Faster R-CNN (0.56 pp de diferencia, p=0.026) y SSD300 vs DETR
-  (0.71 pp, p=0.046) — la variabilidad entre semillas es lo bastante baja como
-  para que hasta las diferencias pequeñas sean fiables.
-- **La ablación de augmentación (YOLO11m A vs B) es la comparación más
-  robusta del estudio**: t pareado=61.07, p=0.0003, d de Cohen=35.3 — un
-  efecto extremadamente grande y consistente en las 3 semillas.
-- **Sobre la potencia estadística**: con n=3 por grupo, un resultado no
-  significativo no demostraría ausencia de diferencia real — pero en este
-  estudio no hizo falta invocar esa cautela, porque las 15 comparaciones
-  alcanzaron significancia.
 """))
 
 notebook = {

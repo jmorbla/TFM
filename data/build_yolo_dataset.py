@@ -8,7 +8,7 @@ Construye data_yolo/ con la estructura que Ultralytics espera:
 Los hardlinks son instantáneos y no ocupan espacio adicional en disco.
 Las imágenes incluidas son exactamente las que tienen label en bdd100k_labels_yolo/.
 
-Uso (desde tfm-comparativa/):
+Uso (desde la raíz del repositorio):
     python data/build_yolo_dataset.py
 """
 

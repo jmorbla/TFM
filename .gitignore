@@ -19,7 +19,6 @@ __pycache__/
 *.pyc
 
 # Checkpoints y pesos de modelos (demasiado grandes para git, incluyen ficheros >100MB)
-runs/
 *.pt
 
 *.pdf
@@ -28,3 +27,9 @@ runs/
 *.png
 
 figuras_*/**
+
+# runs/: solo se versionan los resultados de evaluación de los runs finales
+runs/**
+!runs/**/
+!runs/**/*_final_s[0-2]/eval_results*.json
+!runs/**/*_final_s[0-2]/weights/eval_results*.json

@@ -37,16 +37,12 @@ Genera todas las gráficas del capítulo de resultados a partir de `resumen.json
 `\includegraphics` en la memoria).
 
 **Aviso de FPS**: las cifras de velocidad de `resumen.json` solo son válidas si
-los 18 runs se evaluaron en una única sesión seguida con la máquina en reposo
-(ver `docs/REGISTRO_ENTRENAMIENTOS.md`, "Sesión de consolidación de FPS"). Si no
-fue así, trata las gráficas que usan FPS como orientativas, no definitivas.
+los 18 runs se evaluaron en una única sesión seguida con la máquina en reposo.
 
-Paleta y método siguiendo la skill `dataviz` del repositorio: color categórico en
-orden fijo por modelo, color secuencial de un solo tono para magnitudes, y
-diverging azul/rojo para diferencias con signo. En los scatter/bubble (6
-entidades, por encima del límite de 3 series que garantiza distinción de color
-en todos los pares) cada punto lleva además etiqueta directa y forma de marcador
-distinta, así la identidad no depende solo del color.
+Paleta: color categórico en orden fijo por modelo, color secuencial de un solo
+tono para magnitudes y diverging azul/rojo para diferencias con signo. En los
+scatter/bubble cada punto lleva además etiqueta directa y forma de marcador
+distinta.
 """))
 
 cells.append(code(r"""
@@ -73,9 +69,9 @@ MODELOS = ["YOLO11m (A)", "YOLO11m (B)", "Faster R-CNN", "SSD300", "DETR", "CNN 
 MODELOS = [m for m in MODELOS if m in data]
 
 CLASS_NAMES = ["person", "rider", "car", "truck", "bus",
-               "train", "motor", "bike", "traffic light", "traffic sign"]
+               "motor", "bike", "traffic light", "traffic sign"]
 
-# Paleta validada (dataviz skill, references/palette.md), modo claro.
+# Paleta categórica, modo claro.
 MODEL_COLORS = {
     "YOLO11m (A)":  "#2a78d6",  # slot 1 azul
     "YOLO11m (B)":  "#eb6834",  # slot 2 naranja
@@ -285,20 +281,22 @@ plt.show()
 cells.append(md(r"""
 ## Figura 4 — Mapa de calor: AP@50-95 por clase × modelo
 
-Codificación secuencial de un solo tono (magnitud), de claro a oscuro.
+Codificación secuencial de un solo tono (magnitud), de claro a oscuro. Se
+excluye la clase `train` (solo 2 instancias de GT en las 2 000 imágenes de validación): su AP no es
+representativo y distorsiona la escala de color.
 """))
 
 cells.append(code(r"""
 matriz = np.array([[ap_clase(m, c)[0] if ap_clase(m, c)[0] is not None else np.nan
                      for c in CLASS_NAMES] for m in MODELOS])
 
-fig, ax = plt.subplots(figsize=(10, 0.55 * len(MODELOS) + 1.5))
+fig, ax = plt.subplots(figsize=(11, 0.75 * len(MODELOS) + 1.8))
 im = ax.imshow(matriz, cmap=CMAP_BLUE, aspect="auto", vmin=0, vmax=np.nanmax(matriz))
 
 ax.set_xticks(range(len(CLASS_NAMES)))
-ax.set_xticklabels(CLASS_NAMES, rotation=35, ha="right")
+ax.set_xticklabels(CLASS_NAMES, rotation=35, ha="right", fontsize=13)
 ax.set_yticks(range(len(MODELOS)))
-ax.set_yticklabels(MODELOS)
+ax.set_yticklabels(MODELOS, fontsize=13)
 ax.spines[:].set_visible(False)
 ax.tick_params(length=0)
 ax.grid(False)
@@ -311,13 +309,14 @@ for i in range(len(MODELOS)):
         if np.isnan(v):
             continue
         color_txt = "#ffffff" if v > umbral else INK_PRIMARY
-        ax.text(j, i, f"{v:.1f}", ha="center", va="center", fontsize=8, color=color_txt)
+        ax.text(j, i, f"{v:.1f}", ha="center", va="center", fontsize=13, color=color_txt)
 
 cbar = fig.colorbar(im, ax=ax, fraction=0.025, pad=0.02)
-cbar.set_label("AP@50-95 (%)", color=INK_SECONDARY)
+cbar.set_label("AP@50-95 (%)", color=INK_SECONDARY, fontsize=12)
+cbar.ax.tick_params(labelsize=11)
 cbar.outline.set_visible(False)
 
-ax.set_title("AP@50-95 por clase y modelo")
+ax.set_title("AP@50-95 por clase y modelo", fontsize=15)
 fig.tight_layout()
 guardar(fig, "04_heatmap_ap_por_clase")
 plt.show()
@@ -328,12 +327,13 @@ cells.append(md(r"""
 
 Mismos datos que la Figura 4 en forma de barras, más fácil de leer cifra a
 cifra. Las clases se ordenan de mayor a menor número de instancias de GT en
-validación (`car` domina el desbalanceo, `train` es anécdota con 2 instancias).
+validación (`car` domina el desbalanceo). Se excluye `train` (solo 2
+instancias de GT en las 2 000 imágenes de validación): su AP no es representativo.
 """))
 
 cells.append(code(r"""
 orden_clases_por_instancias = ["car", "traffic sign", "traffic light", "person",
-                                "truck", "bus", "bike", "rider", "motor", "train"]
+                                "truck", "bus", "bike", "rider", "motor"]
 
 fig, ax = plt.subplots(figsize=(11, 5.5))
 n = len(MODELOS)
@@ -361,7 +361,7 @@ plt.show()
 cells.append(md(r"""
 ## Figura 6 — mAP@50-95 vs FPS (frontera de eficiencia)
 
-Eje X logarítmico: el rango de FPS va de ~12 (Faster R-CNN) a ~92 (YOLO11m).
+Eje X logarítmico: el rango de FPS va de ~23 (Faster R-CNN) a ~112 (YOLO11m).
 Con 6 modelos por encima del límite de 3 series que garantiza color distinguible
 en *todos* los pares, cada punto lleva además etiqueta directa y forma de
 marcador propia — la identidad no depende solo del color.
@@ -555,7 +555,9 @@ cells.append(md(r"""
 ## Figura 12 — Ablación: diferencia de AP por clase (A − B)
 
 Barras divergentes: azul = A por encima de B (la augmentación ayuda en esa
-clase), rojo = B por encima de A. Ordenado por magnitud de la diferencia.
+clase), rojo = B por encima de A. Ordenado por magnitud de la diferencia. Se
+excluye `train` (solo 2 instancias de GT en las 2 000 imágenes de validación): su AP no es
+representativo.
 """))
 
 cells.append(code(r"""
@@ -602,28 +604,6 @@ Todas las figuras quedan en `figuras_resultados/`, en PNG (300 dpi) y PDF
 cells.append(code(r"""
 for p in sorted(FIG_DIR.glob("*.pdf")):
     print(p.name)
-"""))
-
-cells.append(md(r"""
-## Conclusiones para la memoria
-
-- **Faster R-CNN obtiene el mAP@50-95 más alto (26.28±0.17%), pero por un
-  margen mínimo sobre YOLO11m(A) (25.72±0.22%)** — 0.56 pp de diferencia,
-  estadísticamente significativa (ver `significancia_estadistica/`) pero
-  pequeña en términos absolutos.
-- **Ponderado por coste, YOLO11m(A) es la mejor relación precisión/eficiencia
-  del estudio**: 40.9 GFLOPs frente a los 748.1 de Faster R-CNN (18.3× menos)
-  y ~110 FPS frente a ~23 — casi el mismo mAP a una fracción del coste.
-- **Los objetos pequeños son el punto débil común a los 5 modelos** (AP small
-  entre 1.17% y 13.43%, muy por debajo del AP large de 16.87%-43.07%),
-  coherente con que el 75.7% de los objetos de BDD100K miden <32 px nativos —
-  no es un fallo de un modelo concreto, es un límite del dataset a esa escala.
-- **Solo YOLO11m (A/B), SSD300 y CNN baseline superan el umbral de 30 FPS en
-  tiempo real**; Faster R-CNN y DETR se quedan cerca pero no lo alcanzan.
-- **La ablación de augmentación es la diferencia más grande de todo el
-  estudio en términos relativos**: +6.64 pp de mAP@50-95 (25.72 vs 19.08) solo
-  por pasar de "flip únicamente" a augmentación completa — mayor que la
-  diferencia entre varias arquitecturas distintas.
 """))
 
 notebook = {

@@ -124,11 +124,7 @@ def buscar_pesos(prefijo, sufijo_pesos):
     return None
 
 
-# Colores por clase: los 8 slots validados de la paleta categorica para las 8
-# clases mas frecuentes, + 2 tonos adicionales para las 2 mas raras (motor,
-# train) -- fuera del set validado para pares simultaneos, mitigado porque
-# cada caja siempre lleva ademas su etiqueta de texto (la identidad nunca
-# depende solo del color).
+# 10 colores por clase; cada caja lleva además su etiqueta de texto.
 CLASS_COLORS = {
     "car":            "#2a78d6",
     "traffic sign":   "#eb6834",
@@ -267,10 +263,30 @@ for etq, prefijo, config_yaml, sufijo_pesos, es_yolo in CONFIGS:
 """))
 
 cells.append(md(r"""
-## Dibujo — GT vs las 6 configuraciones, una figura por imagen
+## Dibujo — un panel por archivo (GT y cada modelo por separado)
+
+Antes se componían GT + 6 modelos en una sola figura 2×4: en la memoria, cada
+panel quedaba a ~25% del ancho de página — ilegible. Ahora cada panel se
+guarda como imagen independiente (PNG + PDF), a resolución nativa y sin
+encogerse dentro de una cuadrícula, para componer la disposición final con
+subfiguras directamente en LaTeX, controlando el tamaño impreso de cada una.
+
+Nomenclatura: `qual_{n}_{stem}__{panel}.pdf`, con `panel` ∈
+`gt`, `yolo11m_a`, `yolo11m_b`, `faster_rcnn`, `ssd300`, `detr`,
+`cnn_baseline`.
 """))
 
 cells.append(code(r"""
+SLUGS = {
+    "YOLO11m (A)":  "yolo11m_a",
+    "YOLO11m (B)":  "yolo11m_b",
+    "Faster R-CNN": "faster_rcnn",
+    "SSD300":       "ssd300",
+    "DETR":         "detr",
+    "CNN baseline": "cnn_baseline",
+}
+
+
 def color_de(label_idx):
     return CLASS_COLORS.get(CLASS_NAMES[label_idx], "#898781")
 
@@ -287,33 +303,62 @@ def dibujar(ax, img, boxes, labels, scores=None, titulo=""):
             texto += f" {scores[i]:.2f}"
         ax.text(x1, max(y1 - 3, 0), texto, fontsize=6.5, color="white",
                 bbox=dict(facecolor=c, edgecolor="none", pad=1.0, alpha=0.9))
-    ax.set_title(titulo, fontsize=9.5)
+    ax.set_title(titulo, fontsize=10)
     ax.set_xticks([]); ax.set_yticks([])
     for spine in ax.spines.values():
         spine.set_visible(False)
 
 
+def guardar_panel(fig, nombre):
+    fig.tight_layout()
+    fig.savefig(FIG_DIR / f"{nombre}.png", dpi=200, bbox_inches="tight")
+    fig.savefig(FIG_DIR / f"{nombre}.pdf", bbox_inches="tight")
+    plt.close(fig)
+
+
 for n, stem in enumerate(SELECCION, start=1):
     img = np.array(Image.open(IMAGES_VAL / f"{stem}.jpg").convert("RGB"))
     gt_boxes, gt_labels = cargar_gt(stem)
+    W, H = Image.open(IMAGES_VAL / f"{stem}.jpg").size
+    figsize = (6.4, 6.4 * H / W)
 
-    fig, axes = plt.subplots(2, 4, figsize=(16, 7.5))
-    axes = axes.flat
-    dibujar(next(axes), img, gt_boxes, gt_labels, titulo=f"Ground truth ({len(gt_labels)} inst.)")
+    fig, ax = plt.subplots(figsize=figsize)
+    dibujar(ax, img, gt_boxes, gt_labels, titulo=f"Ground truth ({len(gt_labels)} inst.)")
+    guardar_panel(fig, f"qual_{n:02d}_{stem}__gt")
+
     for etq, *_ in CONFIGS:
         p = PREDICCIONES[etq][stem]
-        conf_disp = RESUMEN[etq]["conf_max_f1"]["media"]
-        dibujar(next(axes), img, p["boxes"], p["labels"], p["scores"],
-                titulo=f"{etq} (conf≥{conf_disp:.2f}, {len(p['labels'])} det.)")
-    for ax in axes:  # ejes sobrantes del grid 2x4 (7 paneles usados de 8)
-        ax.axis("off")
+        fig, ax = plt.subplots(figsize=figsize)
+        dibujar(ax, img, p["boxes"], p["labels"], p["scores"],
+                titulo=f"{etq} ({len(p['labels'])} det.)")
+        guardar_panel(fig, f"qual_{n:02d}_{stem}__{SLUGS[etq]}")
 
-    fig.suptitle(f"{stem}.jpg", fontsize=11, y=1.0)
-    fig.tight_layout()
-    nombre = f"qual_{n:02d}_{stem}"
-    fig.savefig(FIG_DIR / f"{nombre}.png", dpi=200, bbox_inches="tight")
-    fig.savefig(FIG_DIR / f"{nombre}.pdf", bbox_inches="tight")
-    plt.show()
+    print(f"{stem}.jpg: 7 paneles guardados")
+"""))
+
+cells.append(md(r"""
+## Plantilla LaTeX para componer la cuadrícula (ejemplo, 2 columnas)
+
+Cada panel es un PDF independiente en `figuras_cualitativas/`. Ejemplo para
+componer GT + 6 modelos en subfiguras de 2 columnas (ajustar `width` según el
+número de columnas que se quiera por figura):
+
+```latex
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}{0.48\linewidth}
+    \includegraphics[width=\linewidth]{figuras_cualitativas/qual_01_<stem>__gt.pdf}
+    \caption{Ground truth}
+  \end{subfigure}
+  \begin{subfigure}{0.48\linewidth}
+    \includegraphics[width=\linewidth]{figuras_cualitativas/qual_01_<stem>__yolo11m_a.pdf}
+    \caption{YOLO11m (A)}
+  \end{subfigure}
+  % ... repetir para yolo11m_b, faster_rcnn, ssd300, detr, cnn_baseline
+  \caption{Detecciones sobre \texttt{<stem>.jpg}}
+  \label{fig:qual-<stem>}
+\end{figure}
+```
 """))
 
 cells.append(md(r"""
@@ -323,26 +368,6 @@ cells.append(md(r"""
 cells.append(code(r"""
 for p in sorted(FIG_DIR.glob("*.pdf")):
     print(p.name)
-"""))
-
-cells.append(md(r"""
-## Conclusiones para la memoria
-
-Estas figuras son evidencia cualitativa, no una métrica — sirven para
-respaldar con ejemplos concretos lo que las tablas ya dicen en números, no
-para sustituirlas. Al revisarlas para la memoria, conviene mirar
-específicamente:
-
-- **La imagen más congestionada** (la de mayor nº de instancias de GT) es la
-  que mejor ilustra las diferencias entre modelos: en ella, SSD300 pierde la
-  mayoría de los peatones pequeños del grupo denso mientras que DETR tiende a
-  sobre-detectar `traffic sign`/`traffic light`, un patrón coherente con sus
-  cifras de AP small y de precisión de las tablas agregadas.
-- **La imagen con menos instancias** sirve de control: si un modelo falla ahí
-  también, el problema no es la densidad de la escena.
-- El umbral de confianza mostrado (`conf_max_f1` de cada modelo, no
-  `conf=0.001`) hace que las cajas visibles sean representativas de un punto
-  de operación real, no del barrido completo que sostiene el mAP.
 """))
 
 notebook = {

@@ -71,9 +71,7 @@ def descubrir_huerfanos(res: dict, adoptar: bool) -> int:
     run_curve.py registra un run SOLO cuando el entrenamiento termina, porque
     necesita la duración para el campo `horas`. Un run interrumpido -- Ctrl-C,
     divergencia a NaN, corte de luz -- deja su best.pt en disco pero queda
-    invisible para este script, que itera sobre resultados.json. Le ocurrió al
-    punto de 32k de cnn_baseline: checkpoint válido de la época 21, ausente de
-    la curva y sin ningún aviso.
+    invisible para este script, que itera sobre resultados.json.
 
     No se adoptan solos a propósito: un run interrumpido es una cota inferior y
     entra en la curva solo si lo decides. Con --adoptar se registran.

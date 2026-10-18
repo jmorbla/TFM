@@ -3,7 +3,7 @@ Estadísticas del subconjunto de BDD100K empleado en la comparativa.
 
 Produce las cifras que `evaluate.py` NO puede dar, porque no dependen de ningún
 modelo sino de las anotaciones: número de instancias y tamaño mediano de objeto
-por clase. Rellena la tabla `tab:met-clases` de docs/metodologia.tex.
+por clase, en filas LaTeX para la tabla de clases.
 
 Definición de tamaño: raíz cuadrada del área de la caja en píxeles NATIVOS
 (1280x720), es decir, el lado de un cuadrado de área equivalente. Es la misma
@@ -154,7 +154,7 @@ def main():
 
     # ── Filas LaTeX para tab:met-clases ──────────────────────────────────────
     print("\n" + "=" * 78)
-    print("Filas para tab:met-clases de docs/metodologia.tex (copiar y pegar):")
+    print("Filas LaTeX de la tabla de clases (copiar y pegar):")
     print("=" * 78)
     for i, nombre in enumerate(CLASS_NAMES):
         v = tam.get(i, [])

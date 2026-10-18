@@ -6,11 +6,9 @@ evaluando siempre sobre el MISMO conjunto de validación (2 000 imágenes), y
 registra el mAP alcanzado y el coste. El objetivo es ver dónde satura la curva
 para elegir con datos el tamaño del split de la comparativa principal.
 
-Por qué un script y no un notebook: esto son entre 18 y 52 h de GPU. Un kernel
-de Jupyter abierto durante días es frágil (se cae la conexión, el portátil
-suspende, se pierde el estado). Este script es RESUMIBLE: cada run completado
-queda anotado en resultados.json y, si lo relanzas, se salta lo ya hecho.
-El análisis y las gráficas van aparte, en analisis.ipynb, que solo lee el JSON.
+El script es resumible: cada run completado queda anotado en resultados.json
+y, si se relanza, se salta lo ya hecho. El análisis va aparte, en
+analisis.ipynb, que solo lee el JSON.
 
 Uso (desde TFM/):
     python experiments/curva_aprendizaje/run_curve.py --models yolo11m
@@ -33,19 +31,14 @@ RESULTS = EXP / "resultados.json"
 
 SIZES = [8000, 16000, 32000]
 
-# Épocas por tamaño. NO son constantes: al multiplicar los datos hay que reducir
-# las épocas para que el nº de imágenes vistas quede en el mismo orden y la
-# comparación no confunda "más datos" con "más cómputo". No se dividen
-# exactamente por k porque más datos únicos requieren algo más de recorrido.
+# Épocas por tamaño: al multiplicar los datos se reducen para que el nº de
+# imágenes vistas quede en el mismo orden.
 EPOCHS = {
     "yolo11m":      {8000: 70, 16000: 50, 32000: 36},
     "cnn_baseline": {8000: 85, 16000: 58, 32000: 41},
 }
-# NOTA sobre el techo y el early stopping: con patience=15, un techo ajustado
-# impide que el early stopping llegue a dispararse en los subsets grandes, y el
-# punto terminaría infraentrenado — sesgando la curva EN CONTRA de "más datos".
-# Por eso eval_curve.py registra la época real de parada: si epochs_run ==
-# epochs_cap, ese punto NO convergió y su mAP es una cota inferior.
+# eval_curve.py registra la época real de parada: si epochs_run == epochs_cap,
+# el punto no convergió y su mAP es una cota inferior.
 PATIENCE = 15          # idéntico en todos los puntos de la curva
 SEED = 0               # una sola semilla: interesa la FORMA de la curva
 

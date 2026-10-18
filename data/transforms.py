@@ -1,12 +1,11 @@
 """
-Shared image transforms that also adjust bounding boxes.
-Wraps torchvision functional ops so they work with our (img, target) convention.
+Transforms de imagen compartidos, que también ajustan las cajas.
+Envuelven las operaciones funcionales de torchvision para la convención (img, target).
 
-Notes on normalize=False:
-    Torchvision detectors (Faster R-CNN, SSD) apply their own normalization
-    and resizing internally via GeneralizedRCNNTransform / SSDTransform.
-    For those models pass normalize=False (and optionally img_size=None) so
-    we don't double-normalize.
+Sobre normalize=False:
+    Los detectores de torchvision (Faster R-CNN, SSD) normalizan y redimensionan
+    internamente (GeneralizedRCNNTransform / SSDTransform). Para esos modelos se
+    pasa normalize=False (y opcionalmente img_size=None) para no normalizar dos veces.
 """
 
 import random
@@ -42,11 +41,11 @@ class Normalize:
 
 class Resize:
     """
-    Two modes:
-      square=False (default): resize shorter edge to `size`; cap longer edge at
-                              `max_size` if given.  Boxes scaled proportionally.
-      square=True           : resize to exactly (size × size), stretching if needed.
-                              Boxes scaled independently in x and y.
+    Dos modos:
+      square=False (por defecto): el lado corto pasa a `size`; el largo se limita a
+                                  `max_size` si se indica. Cajas escaladas proporcionalmente.
+      square=True               : redimensiona a (size × size) exactos, deformando si
+                                  hace falta. Cajas escaladas por separado en x e y.
     """
 
     def __init__(self, size: int, max_size: int | None = None, square: bool = False):
@@ -109,16 +108,16 @@ def build_transforms(
     normalize: bool = True,
 ):
     """
-    Build the (img, target) transform pipeline.
+    Construye el pipeline de transforms sobre (img, target).
 
-    Args:
-        img_size : target size for the shorter edge (or square side).
-                   Pass None to skip resizing (e.g. for torchvision detectors).
-        train    : if True, adds RandomHorizontalFlip.
-        max_size : cap longer edge (only used when square=False).
-        square   : if True, resize to (img_size × img_size). Used for SSD-300.
-        normalize: if False, skip ImageNet normalisation (torchvision detectors
-                   apply their own normalization internally).
+    Argumentos:
+        img_size : tamaño del lado corto (o del lado del cuadrado).
+                   None omite el redimensionado (p. ej. detectores de torchvision).
+        train    : si es True, añade RandomHorizontalFlip.
+        max_size : límite del lado largo (solo con square=False).
+        square   : si es True, redimensiona a (img_size × img_size). Lo usa SSD-300.
+        normalize: si es False, omite la normalización de ImageNet (los detectores
+                   de torchvision normalizan internamente).
     """
     ops = []
     if img_size is not None:

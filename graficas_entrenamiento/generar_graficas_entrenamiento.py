@@ -51,7 +51,7 @@ horas de GPU y tamaño de los checkpoints). Las **métricas finales de precisió
 por clase** (mAP, AP por clase, scatter mAP-FPS, etc.) están en
 `graficas_resultados.ipynb` — no se repiten aquí.
 
-## Qué datos hay realmente disponibles (verificado leyendo el código, nada inventado)
+## Datos disponibles
 
 | | YOLO11m (A/B) | CNN baseline / Faster R-CNN / SSD300 / DETR |
 |---|---|---|
@@ -64,12 +64,10 @@ por clase** (mAP, AP por clase, scatter mAP-FPS, etc.) están en
 | Tiempo por época | columna `time` (acumulado) | aproximado aquí a partir del `wall_time` de TensorBoard |
 | Métricas por clase durante el entrenamiento | no existe | no existe |
 
-**Aviso encontrado al leer los logs**: varios `events.out.tfevents.*` de los 4
-modelos no-YOLO tienen **pasos duplicados** (la serie de épocas vuelve a 0 a
-mitad del fichero), signo de que el entrenamiento se reinició al menos una vez.
-La celda de "comprobación de integridad" de más abajo lo cuantifica por run; el
-código se queda con el evento más reciente por época (`wall_time` mayor) y
-descarta el resto.
+Varios `events.out.tfevents.*` de los 4 modelos no-YOLO tienen **pasos
+duplicados** (reinicios del entrenamiento). La celda de "comprobación de
+integridad" los cuantifica por run; el código se queda con el evento más
+reciente por época (`wall_time` mayor).
 """))
 
 cells.append(code(r"""
@@ -106,7 +104,7 @@ SURFACE = "#fcfcfb"
 STATUS_GOOD = "#0ca30c"
 STATUS_CRITICAL = "#d03b3b"
 
-# (etiqueta, prefijo del run_name, techo de epocas segun REGISTRO_ENTRENAMIENTOS.md)
+# (etiqueta, prefijo del run_name, techo de épocas del config)
 CONFIGS_YOLO = [("YOLO11m (A)", "yolo_a_final", 80), ("YOLO11m (B)", "yolo_b_final", 80)]
 CONFIGS_TB = [("CNN baseline", "cnnb_final", 100), ("Faster R-CNN", "frcnn_final", 60),
               ("SSD300", "ssd_final", 60), ("DETR", "detr_final", 100)]
@@ -425,8 +423,7 @@ cells.append(md(r"""
 ## Figura 8 — Época de parada vs techo, en los 18 runs
 
 Si una barra llega exactamente al techo (línea discontinua), la parada temprana
-**no saltó** y el resultado final es una cota inferior — así se declara
-explícitamente para DETR en `REGISTRO_ENTRENAMIENTOS.md`.
+**no saltó** y el resultado final es una cota inferior.
 """))
 
 cells.append(code(r"""
@@ -471,8 +468,7 @@ df_parada
 cells.append(md(r"""
 ## Figura 9 — Horas de GPU reales vs estimación del presupuesto
 
-`REGISTRO_ENTRENAMIENTOS.md` estimaba horas/run *antes* de entrenar, a partir de
-runs anteriores; aquí se calculan las horas **reales** de los 18 runs finales
+Estimación previa de horas/run frente a las horas **reales** de los 18 runs finales
 (YOLO: columna `time` acumulada del CSV; resto: `wall_time` entre el primer y el
 último evento de TensorBoard — aproximado, incluye posibles pausas si hubo
 reinicio).
@@ -584,24 +580,6 @@ cells.append(md(r"""
 cells.append(code(r"""
 for p in sorted(FIG_DIR.glob("*.pdf")):
     print(p.name)
-"""))
-
-cells.append(md(r"""
-## Conclusiones para la memoria
-
-- **Ningún run agotó el techo de épocas**: la parada temprana (`patience=15`)
-  actuó en los 18 (verificado en la Figura 8, `agoto_techo` es `False` en las
-  18 filas) — ningún resultado de la comparativa es una cota inferior por
-  presupuesto de entrenamiento insuficiente, incluido DETR, que era el caso de
-  riesgo declarado en `REGISTRO_ENTRENAMIENTOS.md`.
-- **El coste real de GPU fue muy inferior al estimado antes de entrenar, en
-  los dos modelos más caros**: Faster R-CNN costó 5.0 h reales frente a las
-  16.6 h presupuestadas, y DETR 8.9 h frente a 25.2 h — la parada temprana
-  ahorró la mayor parte del presupuesto reservado para ambos.
-- **Dos runs de CNN baseline (semillas 0 y 2) muestran reinicios en su log de
-  TensorBoard** (detectado en la comprobación de integridad, no en las
-  gráficas) — merece revisarse si coincide con el episodio de divergencia que
-  motivó el `grad_clip=10.0` ya documentado en el registro de entrenamientos.
 """))
 
 notebook = {

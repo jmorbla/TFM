@@ -1,11 +1,8 @@
 """
 Construye los datasets anidados para la curva de aprendizaje.
 
-Genera un subset de entrenamiento por cada tamaño pedido, TODOS ANIDADOS entre
-sí (8k ⊂ 16k ⊂ 32k), y con el MISMO conjunto de validación en los tres. Esa es
-la condición que hace interpretable la curva: si al aumentar el tamaño cambiara
-también la identidad de las imágenes o el conjunto de evaluación, la diferencia
-de mAP mezclaría varios efectos y no mediría el que interesa.
+Genera un subset de entrenamiento por cada tamaño pedido, anidados entre sí
+(8k ⊂ 16k ⊂ 32k), y con el mismo conjunto de validación en los tres.
 
 Salida por cada tamaño N:
     bdd100k_labels_yolo_<N>/{train,val}/*.txt

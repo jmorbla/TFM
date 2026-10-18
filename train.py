@@ -1,16 +1,15 @@
 """
-Unified training entry point for all models except YOLO11
-(which delegates to the ultralytics API via models/yolo11/train.py).
+Punto de entrada único de entrenamiento para todos los modelos salvo YOLO11
+(que delega en la API de ultralytics mediante models/yolo11/train.py).
 
-Usage:
+Uso:
     python train.py --model faster_rcnn --config configs/faster_rcnn.yaml
     python train.py --model ssd         --config configs/ssd.yaml
     python train.py --model detr        --config configs/detr.yaml
     python train.py --model cnn_baseline --config configs/cnn_baseline.yaml
-    python train.py --model cnn_gru     --config configs/cnn_gru.yaml
 
-All models train on the same 8 000-image BDD100K subset defined in
-configs/bdd100k.yaml, sharing the same train/val split for a fair comparison.
+Todos los modelos se entrenan sobre el mismo subconjunto de 8 000 imágenes de
+BDD100K definido en configs/bdd100k.yaml, con la misma partición train/val.
 """
 
 import argparse
@@ -31,12 +30,12 @@ from torch.utils.tensorboard import SummaryWriter
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 from tqdm import tqdm
 
-from data.dataset import BDD100KDetection, BDD100KSequence
+from data.dataset import BDD100KDetection
 from data.transforms import build_transforms
 from evaluate import MAX_DET_THRESHOLDS, postprocess_predictions
 
-# ── Constants ─────────────────────────────────────────────────────────────────
-NUM_WORKERS = 2          # keep low to avoid CLOCK_WATCHDOG_TIMEOUT on Windows
+# ── Constantes ─────────────────────────────────────────────────────────────────
+NUM_WORKERS = 2          # bajo, para evitar CLOCK_WATCHDOG_TIMEOUT en Windows
 DEVICE_TYPE  = "cuda" if torch.cuda.is_available() else "cpu"
 
 # Umbral de confianza de la validación intra-entrenamiento. Más alto que el de
@@ -70,7 +69,7 @@ def _worker_init(worker_id: int):
     np.random.seed(seed + worker_id)
 
 
-# ── Model factory ─────────────────────────────────────────────────────────────
+# ── Factoría de modelos ─────────────────────────────────────────────────────────────
 
 def get_model(name: str, cfg: dict, nc: int):
     if name == "faster_rcnn":
@@ -85,21 +84,11 @@ def get_model(name: str, cfg: dict, nc: int):
     elif name == "cnn_baseline":
         from models.cnn_baseline.model import build_model
         return build_model(nc=nc, pretrained=cfg.get("pretrained_backbone", True))
-    elif name == "cnn_gru":
-        from models.cnn_gru.model import build_model
-        seq = cfg.get("sequence", {})
-        gru = cfg.get("gru", {})
-        return build_model(
-            nc=nc,
-            T=seq.get("T", 4),
-            gru_hidden=gru.get("hidden_size", 256),
-            pretrained=cfg.get("pretrained_backbone", True),
-        )
     else:
         raise ValueError(f"Unknown model: {name}")
 
 
-# ── Optimizer ─────────────────────────────────────────────────────────────────
+# ── Optimizador ─────────────────────────────────────────────────────────────────
 
 def get_optimizer(model, cfg: dict, model_name: str = ""):
     tr      = cfg["training"]
@@ -107,7 +96,7 @@ def get_optimizer(model, cfg: dict, model_name: str = ""):
     lr      = tr.get("lr", tr.get("lr0", 1e-3))
     wd      = tr.get("weight_decay", 1e-4)
 
-    # DETR uses a lower LR for the ResNet backbone than for the transformer head
+    # DETR usa un LR menor en el backbone ResNet que en el resto (transformer)
     if model_name == "detr" and "lr_backbone" in tr:
         lr_bb = tr["lr_backbone"]
         backbone_params = [
@@ -136,7 +125,7 @@ def get_optimizer(model, cfg: dict, model_name: str = ""):
         )
 
 
-# ── Scheduler ─────────────────────────────────────────────────────────────────
+# ── Planificador del LR ─────────────────────────────────────────────────────────────────
 
 def get_scheduler(optimizer, cfg: dict, epochs: int):
     tr    = cfg["training"]
@@ -156,7 +145,7 @@ def collate_fn(batch):
     return tuple(zip(*batch))
 
 
-# ── One epoch of training ─────────────────────────────────────────────────────
+# ── Una época de entrenamiento ─────────────────────────────────────────────────────
 
 def train_one_epoch(
     model, loader, optimizer, scaler, device, amp: bool,
@@ -166,17 +155,15 @@ def train_one_epoch(
     total_loss = 0.0
 
     for imgs, targets in tqdm(loader, desc=f"Epoch {epoch + 1} train", leave=False):
-        # Move to device
-        if model_name == "cnn_gru":
-            imgs = torch.stack(list(imgs)).to(device)   # (B, T, 3, H, W)
-        elif model_name == "cnn_baseline":
+        # Mover a la GPU
+        if model_name == "cnn_baseline":
             imgs = torch.stack(list(imgs)).to(device)   # (B, 3, H, W)
         else:
             imgs = [img.to(device) for img in imgs]
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
-        # torchvision detectors use 0 = background; dataset labels are 0-indexed
-        # → shift labels +1 so person=1, rider=2, …, traffic sign=10
+        # Los detectores de torchvision usan 0 = fondo y las etiquetas del dataset
+        # empiezan en 0 → se suma 1: person=1, rider=2, …, traffic sign=10
         if model_name in ("faster_rcnn", "ssd"):
             targets = [
                 {**t, "labels": t["labels"] + 1} for t in targets
@@ -186,17 +173,17 @@ def train_one_epoch(
 
         with autocast(device_type=DEVICE_TYPE, enabled=amp):
             if model_name == "detr":
-                # DETRWrapper.forward returns {"loss": scalar, ...}
+                # DETRWrapper.forward devuelve {"loss": escalar, ...}
                 out  = model(torch.stack(imgs), targets)
                 loss = out["loss"]
 
             elif model_name in ("faster_rcnn", "ssd"):
-                # torchvision detectors return a dict of losses in training mode
+                # en modo entrenamiento los detectores de torchvision devuelven un dict de pérdidas
                 loss_dict = model(imgs, targets)
                 loss = sum(loss_dict.values())
 
             else:
-                # cnn_baseline / cnn_gru — use custom DetectionLoss
+                # cnn_baseline — DetectionLoss propia
                 cls_preds, reg_preds = model(imgs)
                 loss = loss_fn(cls_preds, reg_preds, targets)
 
@@ -213,7 +200,7 @@ def train_one_epoch(
     return avg
 
 
-# ── One epoch of validation ───────────────────────────────────────────────────
+# ── Una época de validación ───────────────────────────────────────────────────
 
 @torch.inference_mode()
 def validate_one_epoch(
@@ -242,7 +229,7 @@ def validate_one_epoch(
     )
 
     for imgs, targets in tqdm(loader, desc=f"Epoch {epoch + 1} val", leave=False):
-        if model_name in ("cnn_gru", "cnn_baseline", "detr"):
+        if model_name in ("cnn_baseline", "detr"):
             imgs_t = torch.stack([img.to(device) for img in imgs])
         else:
             imgs_t = [img.to(device) for img in imgs]
@@ -264,9 +251,6 @@ def validate_one_epoch(
     return map50_95, map50
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
-
-
 # ── Consola: forzar UTF-8 ────────────────────────────────────────────────────
 # Este script imprime caracteres de caja y flechas. Cuando lo lanza una persona
 # desde una terminal moderna funciona, pero cuando lo lanza otro script por
@@ -280,11 +264,14 @@ for _stream in (sys.stdout, sys.stderr):
     except Exception:
         pass
 
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model", required=True,
-        choices=["faster_rcnn", "ssd", "detr", "cnn_baseline", "cnn_gru"],
+        choices=["faster_rcnn", "ssd", "detr", "cnn_baseline"],
     )
     parser.add_argument("--config",   required=True)
     parser.add_argument("--data",     default="configs/bdd100k.yaml")
@@ -302,10 +289,6 @@ def main():
     parser.add_argument("--seed", type=int, default=0,
                         help="Semilla de reproducibilidad. La fase final del "
                              "plan usa 0, 1 y 2 para obtener la barra de error.")
-    parser.add_argument("--lr", type=float, default=None,
-                        help="Sobrescribe training.lr del YAML (fase de tuning)")
-    parser.add_argument("--lr_backbone", type=float, default=None,
-                        help="Sobrescribe training.lr_backbone (solo DETR)")
     args = parser.parse_args()
 
     set_seed(args.seed)
@@ -314,12 +297,6 @@ def main():
     # los comentarios acentuados y los separadores Unicode de los YAML.
     cfg = yaml.safe_load(Path(args.config).read_text(encoding="utf-8"))
     bdd = yaml.safe_load(Path(args.data).read_text(encoding="utf-8"))
-
-    # Overrides de CLI: permiten barrer el learning rate sin duplicar YAMLs.
-    if args.lr is not None:
-        cfg["training"]["lr"] = args.lr
-    if args.lr_backbone is not None:
-        cfg["training"]["lr_backbone"] = args.lr_backbone
 
     if bdd["dataset"]["images_dir"] is None:
         raise ValueError("Set dataset.images_dir in configs/bdd100k.yaml")
@@ -335,7 +312,7 @@ def main():
     run_dir   = Path(args.runs_dir) / args.model / run_name
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    # Save configs for reproducibility
+    # Guardar los configs usados, para reproducibilidad
     shutil.copy(args.config, run_dir / "model_config.yaml")
     shutil.copy(args.data,   run_dir / "data_config.yaml")
 
@@ -347,22 +324,22 @@ def main():
           f"epochs(techo): {epochs}   patience: {args.patience}")
 
     # ── Transforms (model-specific) ──────────────────────────────────────────
-    # Torchvision detectors (Faster R-CNN, SSD) apply their own normalisation
-    # and resizing internally — we must NOT double-normalise.
+    # Los detectores de torchvision (Faster R-CNN, SSD) normalizan y redimensionan
+    # internamente: NO hay que normalizar dos veces.
     if args.model == "faster_rcnn":
-        # Pass raw (non-normalised) tensors at original size; model handles the rest
+        # Tensores sin normalizar y a tamaño original; el modelo hace el resto
         train_tf = build_transforms(None, train=True,  normalize=False)
         val_tf   = build_transforms(None, train=False, normalize=False)
     elif args.model == "ssd":
-        # SSD-300 internal transform resizes to 300 × 300 and normalises
+        # La transformación interna de SSD-300 redimensiona a 300 × 300 y normaliza
         train_tf = build_transforms(300, train=True,  square=True, normalize=False)
         val_tf   = build_transforms(300, train=False, square=True, normalize=False)
     elif args.model == "detr":
-        # HuggingFace DETR: we pre-process (resize + normalise); no internal transform
+        # HuggingFace DETR: se preprocesa aquí (redimensionar + normalizar); sin transform interna
         train_tf = build_transforms(img_size, train=True,  max_size=1333)
         val_tf   = build_transforms(img_size, train=False, max_size=1333)
     else:
-        # cnn_baseline, cnn_gru: standard pipeline (resize + normalise)
+        # cnn_baseline: pipeline estándar (redimensionar + normalizar)
         train_tf = build_transforms(img_size, train=True)
         val_tf   = build_transforms(img_size, train=False)
 
@@ -372,20 +349,8 @@ def main():
     labels_train = str(Path(bdd["dataset"]["labels_dir"]) / "train")
     labels_val   = str(Path(bdd["dataset"]["labels_dir"]) / "val")
 
-    if args.model == "cnn_gru":
-        seq = cfg.get("sequence", {})
-        T   = seq.get("T", 4)
-        train_ds = BDD100KSequence(
-            images_train, labels_train, T=T,
-            stride=seq.get("stride", 2), transforms=train_tf,
-        )
-        val_ds = BDD100KSequence(
-            images_val, labels_val, T=T,
-            stride=seq.get("stride", 2), transforms=val_tf,
-        )
-    else:
-        train_ds = BDD100KDetection(images_train, labels_train, transforms=train_tf)
-        val_ds   = BDD100KDetection(images_val,   labels_val,   transforms=val_tf)
+    train_ds = BDD100KDetection(images_train, labels_train, transforms=train_tf)
+    val_ds   = BDD100KDetection(images_val,   labels_val,   transforms=val_tf)
 
     pin = bdd["training"].get("pin_memory", True) and DEVICE_TYPE == "cuda"
     g = torch.Generator()
@@ -409,16 +374,13 @@ def main():
     scaler    = GradScaler(device=DEVICE_TYPE, enabled=amp)
     writer    = SummaryWriter(log_dir=str(run_dir / "tb"))
 
-    # Loss function (only needed for custom CNN models)
+    # Función de pérdida (solo para la CNN propia)
     loss_fn = None
     if args.model == "cnn_baseline":
         from models.cnn_baseline.loss import DetectionLoss
         loss_fn = DetectionLoss(nc=nc).to(device)
-    elif args.model == "cnn_gru":
-        from models.cnn_gru.loss import DetectionLoss
-        loss_fn = DetectionLoss(nc=nc).to(device)
 
-    # Log hyperparameters to TensorBoard
+    # Registrar los hiperparámetros en TensorBoard
     hparams = {
         "model":        args.model,
         "epochs":       epochs,
@@ -448,11 +410,8 @@ def main():
             loss_fn=loss_fn, grad_clip=tr.get("grad_clip", 0.0),
         )
         # ── Guardia anti-divergencia ─────────────────────────────────────────
-        # Una vez la pérdida es NaN, los pesos ya están corruptos y todas las
-        # épocas siguientes producen mAP=0. En el run de 32k de cnn_baseline eso
-        # supuso 11 épocas y ~4.1 h de GPU tiradas, y además last.pt acabó con
-        # 245 de 278 tensores a NaN. Abortamos y NO tocamos last.pt, de modo que
-        # el mejor checkpoint anterior a la divergencia queda intacto y usable.
+        # Si la pérdida no es finita se aborta antes de guardar: last.pt y
+        # best.pt conservan los últimos pesos sanos.
         if not math.isfinite(train_loss):
             sep = "=" * 72
             print("" + sep)
