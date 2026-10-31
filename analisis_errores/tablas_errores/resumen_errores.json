@@ -1,0 +1,181 @@
+{
+  "semilla": 0,
+  "iou_match": 0.5,
+  "clases_excluidas": [
+    "train"
+  ],
+  "modelos": {
+    "YOLO11m (A)": {
+      "umbral": 0.2673,
+      "FP_por_img": 3.89,
+      "FN_por_img": 6.06,
+      "FP_pct_micro": 24.1,
+      "FN_pct_micro": 33.1,
+      "taxonomia_FP_pct": {
+        "Duplicado": 1.8,
+        "Confusión de clase": 8.8,
+        "Mal localizado": 45.8,
+        "Fondo": 43.6
+      },
+      "taxonomia_FN_pct": {
+        "Confusión de clase": 3.9,
+        "Asignado a otro GT": 1.4,
+        "Mal localizado": 35.7,
+        "No detectado": 59.1
+      },
+      "recall_por_tamano_pct": {
+        "small (<32²)": 53.7,
+        "medium": 79.2,
+        "large (>96²)": 93.1
+      },
+      "rho_n_AP_por_clase": 0.7,
+      "rho_n_AP_controlando_tamano": 0.92,
+      "AUC_tamano_deteccion": 0.738,
+      "AUC_score_TP": 0.956
+    },
+    "YOLO11m (B)": {
+      "umbral": 0.2062,
+      "FP_por_img": 5.39,
+      "FN_por_img": 6.93,
+      "FP_pct_micro": 32.1,
+      "FN_pct_micro": 37.8,
+      "taxonomia_FP_pct": {
+        "Duplicado": 1.7,
+        "Confusión de clase": 8.7,
+        "Mal localizado": 42.4,
+        "Fondo": 47.1
+      },
+      "taxonomia_FN_pct": {
+        "Confusión de clase": 4.2,
+        "Asignado a otro GT": 1.3,
+        "Mal localizado": 38.7,
+        "No detectado": 55.9
+      },
+      "recall_por_tamano_pct": {
+        "small (<32²)": 48.2,
+        "medium": 74.9,
+        "large (>96²)": 90.1
+      },
+      "rho_n_AP_por_clase": 0.85,
+      "rho_n_AP_controlando_tamano": 0.97,
+      "AUC_tamano_deteccion": 0.736,
+      "AUC_score_TP": 0.946
+    },
+    "Faster R-CNN": {
+      "umbral": 0.5646,
+      "FP_por_img": 5.45,
+      "FN_por_img": 5.43,
+      "FP_pct_micro": 29.7,
+      "FN_pct_micro": 29.6,
+      "taxonomia_FP_pct": {
+        "Duplicado": 3.0,
+        "Confusión de clase": 6.1,
+        "Mal localizado": 43.3,
+        "Fondo": 47.6
+      },
+      "taxonomia_FN_pct": {
+        "Confusión de clase": 4.7,
+        "Asignado a otro GT": 1.4,
+        "Mal localizado": 38.9,
+        "No detectado": 55.0
+      },
+      "recall_por_tamano_pct": {
+        "small (<32²)": 58.6,
+        "medium": 81.4,
+        "large (>96²)": 93.1
+      },
+      "rho_n_AP_por_clase": 0.7,
+      "rho_n_AP_controlando_tamano": 0.92,
+      "AUC_tamano_deteccion": 0.727,
+      "AUC_score_TP": 0.951
+    },
+    "SSD300": {
+      "umbral": 0.1932,
+      "FP_por_img": 7.91,
+      "FN_por_img": 10.78,
+      "FP_pct_micro": 51.1,
+      "FN_pct_micro": 58.8,
+      "taxonomia_FP_pct": {
+        "Duplicado": 3.3,
+        "Confusión de clase": 4.7,
+        "Mal localizado": 61.1,
+        "Fondo": 30.8
+      },
+      "taxonomia_FN_pct": {
+        "Confusión de clase": 2.0,
+        "Asignado a otro GT": 0.7,
+        "Mal localizado": 40.4,
+        "No detectado": 56.9
+      },
+      "recall_por_tamano_pct": {
+        "small (<32²)": 18.5,
+        "medium": 60.7,
+        "large (>96²)": 90.1
+      },
+      "rho_n_AP_por_clase": 0.65,
+      "rho_n_AP_controlando_tamano": 0.98,
+      "AUC_tamano_deteccion": 0.839,
+      "AUC_score_TP": 0.908
+    },
+    "DETR": {
+      "umbral": 0.6466,
+      "FP_por_img": 24.25,
+      "FN_por_img": 8.34,
+      "FP_pct_micro": 70.8,
+      "FN_pct_micro": 45.5,
+      "taxonomia_FP_pct": {
+        "Duplicado": 15.7,
+        "Confusión de clase": 1.1,
+        "Mal localizado": 51.7,
+        "Fondo": 31.5
+      },
+      "taxonomia_FN_pct": {
+        "Confusión de clase": 2.7,
+        "Asignado a otro GT": 0.5,
+        "Mal localizado": 61.8,
+        "No detectado": 35.0
+      },
+      "recall_por_tamano_pct": {
+        "small (<32²)": 36.6,
+        "medium": 71.9,
+        "large (>96²)": 88.0
+      },
+      "rho_n_AP_por_clase": 0.28,
+      "rho_n_AP_controlando_tamano": 0.71,
+      "AUC_tamano_deteccion": 0.786,
+      "AUC_score_TP": 0.917
+    },
+    "CNN baseline": {
+      "umbral": 0.3574,
+      "FP_por_img": 6.87,
+      "FN_por_img": 7.97,
+      "FP_pct_micro": 39.9,
+      "FN_pct_micro": 43.5,
+      "taxonomia_FP_pct": {
+        "Duplicado": 6.1,
+        "Confusión de clase": 5.8,
+        "Mal localizado": 49.7,
+        "Fondo": 38.3
+      },
+      "taxonomia_FN_pct": {
+        "Confusión de clase": 3.6,
+        "Asignado a otro GT": 1.2,
+        "Mal localizado": 35.2,
+        "No detectado": 60.1
+      },
+      "recall_por_tamano_pct": {
+        "small (<32²)": 46.3,
+        "medium": 68.0,
+        "large (>96²)": 71.3
+      },
+      "rho_n_AP_por_clase": 0.95,
+      "rho_n_AP_controlando_tamano": 0.92,
+      "AUC_tamano_deteccion": 0.662,
+      "AUC_score_TP": 0.903
+    }
+  },
+  "fn_comunes": {
+    "perdidos_por_todos_pct": 17.5,
+    "perdidos_por_alguno_pct": 71.7
+  }
+}
